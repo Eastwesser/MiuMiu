@@ -1,0 +1,50 @@
+from random import randint
+
+from aiogram import F, Router
+from aiogram.types import CallbackQuery
+
+from keyboards.inline_keyboards.actions_kb import (
+    random_num_updated_cb_data,
+    build_actions_kb,
+    FixedRandomNumberCbData,
+)
+
+router = Router(name=__name__)
+
+
+@router.callback_query(F.data == random_num_updated_cb_data)  # обрабатываем запрос, data которая была в кнопке
+async def handle_random_number_edited(callback_query: CallbackQuery):
+    await callback_query.answer(
+        # url=f"t.me/{bot_me.username}?start={randint(1, 100)}",  # {bot_me.username} имя бота
+    )
+    #  callback_query.bot.edit_message_text() # через edit бот может отредактировать сообщение
+    await callback_query.message.edit_text(
+        text=f"Random number: {randint(1, 100)}",
+        reply_markup=build_actions_kb("Generate again"),  # если закомментить, то мы перестанем обновлять результат
+        # в отредактированном сообщении тоже можем указать клавиатуру
+    )
+
+
+@router.callback_query(FixedRandomNumberCbData.filter(F.number == 66))  # такой фильтр пропускает только 66
+async def handle_target_random_number_callback(
+        callback_query: CallbackQuery,
+
+):
+    await callback_query.answer(
+        text="JACKPOT",  # выводит такую строку
+        cache_time=10,
+    )
+
+
+@router.callback_query(FixedRandomNumberCbData.filter())
+async def handle_fixed_random_number_callback(
+        callback_query: CallbackQuery,
+        callback_data: FixedRandomNumberCbData,
+):
+    await callback_query.answer(
+        text=(f"Your fixed random number is {callback_data.number}\n"
+              f"Callback data: {callback_query.data!r}"
+              ),  # достаём данные из кнопки, используя аннотацию
+        show_alert=True,  # фиксируем текст, не будет меняться ответ
+        cache_time=10,
+    )

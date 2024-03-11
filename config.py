@@ -1,7 +1,11 @@
+import os
+
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
+dotenv_path = os.path.join(os.getcwd(), ".venv", ".env")
+
+load_dotenv(dotenv_path)
 
 
 class Settings(BaseSettings):

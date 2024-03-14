@@ -1,7 +1,8 @@
 import random
+from typing import Any, Awaitable, Callable, Dict
 
-from aiogram import Router
-from aiogram import types
+from aiogram import BaseMiddleware
+from aiogram import Router, types
 from aiogram.enums.dice_emoji import DiceEmoji
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -10,6 +11,10 @@ from aiogram.types import Message
 router = Router(name=__name__)
 
 CHOICES = ["Rock", "Paper", "Scissors"]
+
+WINS_REQUIRED = 3
+BLACKJACK_FACES = ["❤️", "♠️", "♦️", "♣️"]
+BLACKJACK_VALUES = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 
 
 def build_rps_keyboard() -> InlineKeyboardMarkup:
@@ -95,9 +100,101 @@ async def play_games2(message: Message):
     print(x.dice.value)
 
 
-@router.message(Command("hearts", prefix="!/"))  # Обработчик команды для игры в Черви
-async def play_hearts(message: Message):
-    hearts_faces = ["❤️", "♠️", "♦️", "♣️"]  # Список символов мастей
-    hearts_values = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]  # Список значений карт
-    card = random.choice(hearts_values) + random.choice(hearts_faces)  # Выбор случайной карты
-    await message.answer(f"Your card is: {card}")  # Отправка сообщения с картой игроку
+# BLACKJACK
+class BlackjackMiddleware(BaseMiddleware):
+    async def __call__(
+            self,
+            handler: Callable[[types.Message, Dict[str, Any]], Awaitable[Any]],
+            message: types.Message,
+            data: Dict[str, Any]
+    ) -> Any:
+        # Implement your middleware logic here
+        result = await handler(message, data)
+        return result
+
+def deal_card():
+    return random.choice(BLACKJACK_FACES), random.choice(BLACKJACK_VALUES)
+
+# Global variables for player and dealer hands
+player_hand = []
+dealer_hand = []
+
+# Handler for the /startblackjack command
+@router.message(Command("startblackjack", prefix="!/"))
+async def start_blackjack(message: types.Message):
+    await message.answer("Hi! Welcome to Blackjack. Send /play21 to start playing.")
+
+# Handler for the /play21 command
+@router.message(Command("play21", prefix="!/"))
+async def play_blackjack(message: types.Message):
+    global player_hand, dealer_hand
+    player_hand = [deal_card(), deal_card()]
+    dealer_hand = [deal_card(), deal_card()]
+
+    player_score = calculate_hand_score(player_hand)
+    dealer_score = calculate_hand_score(dealer_hand)
+
+    player_message = f"Your hand: {player_hand}\nYour score: {player_score}"
+    dealer_message = f"Dealer's hand: [{dealer_hand[0]}, ???]\nDealer's score: {dealer_hand[0][1]}"
+
+    await message.answer(player_message)
+    await message.answer(dealer_message)
+    await message.answer("Type /hit to get a card or /stand to end your turn.")
+
+# Handler for the /hit command
+@router.message(Command("hit", prefix="!/"))
+async def hit_blackjack(message: types.Message):
+    global player_hand
+    card = deal_card()
+    player_hand.append(card)
+
+    player_score = calculate_hand_score(player_hand)
+    await message.answer(f"You drew: {card}. Your score: {player_score}")
+
+    if player_score > 21:
+        await message.answer("You bust! Dealer wins.")
+        reset_game()
+
+# Handler for the /stand command
+@router.message(Command("stand", prefix="!/"))
+async def stand_blackjack(message: types.Message):
+    global dealer_hand
+    while calculate_hand_score(dealer_hand) < 17:
+        dealer_hand.append(deal_card())
+
+    dealer_score = calculate_hand_score(dealer_hand)
+    await message.answer(f"Dealer's hand: {dealer_hand}. Dealer's score: {dealer_score}")
+
+    player_score = calculate_hand_score(player_hand)
+    if player_score > 21 or player_score < dealer_score <= 21:
+        await message.answer("Dealer wins!")
+    elif dealer_score > 21 or player_score > dealer_score:
+        await message.answer("You win!")
+    elif player_score == dealer_score:
+        await message.answer("It's a tie!")
+
+    reset_game()
+
+# Function to calculate the score of a hand in blackjack
+def calculate_hand_score(hand):
+    score = 0
+    ace_count = 0
+    for card in hand:
+        value = card[1]
+        if value.isdigit():
+            score += int(value)
+        elif value in ('J', 'Q', 'K'):
+            score += 10
+        elif value == 'A':
+            ace_count += 1
+            score += 11
+    while ace_count > 0 and score > 21:
+        score -= 10
+        ace_count -= 1
+    return score
+
+# Function to reset the game
+def reset_game():
+    global player_hand, dealer_hand
+    player_hand = []
+    dealer_hand = []

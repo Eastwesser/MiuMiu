@@ -1,9 +1,8 @@
 import os
 
 import aiohttp
-from aiogram import Bot
+from aiogram import Bot, types, Dispatcher
 from aiogram import Router
-from aiogram import types, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import FSInputFile
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
@@ -12,7 +11,6 @@ from dotenv import load_dotenv
 from keyboards.inline_keyboards.actions_kb import build_actions_kb
 
 bot_token = os.getenv('BOT_TOKEN')
-forecast_api = os.getenv('WEATHER_API_TOKEN')
 load_dotenv()
 
 bot = Bot(token=bot_token)
@@ -257,3 +255,5 @@ async def process_glasses_serv(callback_query: types.CallbackQuery):
 async def kittens_handler(message: types.Message):
     sticker_id = 'CAACAgIAAxkBAT_q_mXeZb3RFKlAR4yp5GbS0nfsH0kbAAL9PQACIgzxSsCa0NR6qOSDNAQ'
     await send_sticker(message.chat.id, sticker_id)
+
+# ======================================================================================================================

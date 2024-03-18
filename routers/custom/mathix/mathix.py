@@ -142,19 +142,19 @@ conversion_functions = {
 # Create a keyboard for the conversion menu
 def create_keyboard(commands):
     buttons_row_1 = [
-        InlineKeyboardButton(text="INCHES", callback_data="/inches_to_cm"),
-        InlineKeyboardButton(text="MILES", callback_data="/miles_to_km"),
-        InlineKeyboardButton(text="POUNDS", callback_data="/pounds_to_kg"),
+        InlineKeyboardButton(text="INCHES", callback_data="/inches_options"),
+        InlineKeyboardButton(text="MILES", callback_data="/miles_options"),
+        InlineKeyboardButton(text="POUNDS", callback_data="/pounds_options"),
     ]
     buttons_row_2 = [
-        InlineKeyboardButton(text="F°", callback_data="/fahrenheit_to_celsius"),
-        InlineKeyboardButton(text="OUNCES", callback_data="/ounces_to_ml"),
-        InlineKeyboardButton(text="GALLONS", callback_data="/gallons_to_liters"),
+        InlineKeyboardButton(text="F°", callback_data="/fahrenheit_options"),
+        InlineKeyboardButton(text="OUNCES", callback_data="/ounces_options"),
+        InlineKeyboardButton(text="GALLONS", callback_data="/gallons_options"),
     ]
     buttons_row_3 = [
-        InlineKeyboardButton(text="FEET", callback_data="/feet_to_meters"),
-        InlineKeyboardButton(text="YARDS", callback_data="/yards_to_meters"),
-        InlineKeyboardButton(text="CUPS", callback_data="/cups_to_liters"),
+        InlineKeyboardButton(text="FEET", callback_data="/feet_options"),
+        InlineKeyboardButton(text="YARDS", callback_data="/yards_options"),
+        InlineKeyboardButton(text="CUPS", callback_data="/cups_options"),
     ]
     return InlineKeyboardMarkup(inline_keyboard=[
         buttons_row_1,
@@ -163,10 +163,51 @@ def create_keyboard(commands):
     ])
 
 
+# Define a dictionary to store the additional keyboards for each conversion command
+additional_keyboards = {
+    "/inches_options": [
+        InlineKeyboardButton(text="Inches to Centimeters", callback_data="/inches_to_cm"),
+        InlineKeyboardButton(text="Centimeters to Inches", callback_data="/cm_to_inches"),
+    ],
+    "/miles_options": [
+        InlineKeyboardButton(text="Miles to Kilometers", callback_data="/miles_to_km"),
+        InlineKeyboardButton(text="Kilometers to Miles", callback_data="/km_to_miles"),
+    ],
+    "/pounds_options": [
+        InlineKeyboardButton(text="Pounds to Kilograms", callback_data="/pounds_to_kg"),
+        InlineKeyboardButton(text="Kilograms to Pounds", callback_data="/kg_to_pounds"),
+    ],
+    "/fahrenheit_options": [
+        InlineKeyboardButton(text="Fahrenheit to Celsius", callback_data="/fahrenheit_to_celsius"),
+        InlineKeyboardButton(text="Celsius to Fahrenheit", callback_data="/celsius_to_fahrenheit"),
+    ],
+    "/ounces_options": [
+        InlineKeyboardButton(text="Ounces to Milliliters", callback_data="/ounces_to_ml"),
+        InlineKeyboardButton(text="Milliliters to Ounces", callback_data="/ml_to_ounces"),
+    ],
+    "/gallons_options": [
+        InlineKeyboardButton(text="Gallons to Liters", callback_data="/gallons_to_liters"),
+        InlineKeyboardButton(text="Liters to Gallons", callback_data="/liters_to_gallons"),
+    ],
+    "/feet_options": [
+        InlineKeyboardButton(text="Feet to Meters", callback_data="/feet_to_meters"),
+        InlineKeyboardButton(text="Meters to Feet", callback_data="/meters_to_feet"),
+    ],
+    "/yards_options": [
+        InlineKeyboardButton(text="Yards to Meters", callback_data="/yards_to_meters"),
+        InlineKeyboardButton(text="Meters to Yards", callback_data="/meters_to_yards"),
+    ],
+    "/cups_options": [
+        InlineKeyboardButton(text="Cups to Liters", callback_data="/cups_to_liters"),
+        InlineKeyboardButton(text="Liters to Cups", callback_data="/liters_to_cups"),
+    ],
+}
+
+
 # Handle the /converter command to display the conversion menu
 @router.message(Command("converter", prefix="/!%"))
 async def converter_menu(message: types.Message):
-    keyboard = create_keyboard(list(conversion_functions.keys()))
+    keyboard = create_keyboard(list(additional_keyboards.keys()))
     await message.reply("Choose a conversion:", reply_markup=keyboard)
 
 
@@ -178,8 +219,16 @@ last_conversion_command = None
 @router.callback_query()
 async def handle_conversion_query(callback_query: types.CallbackQuery):
     global last_conversion_command
-    last_conversion_command = callback_query.data
-    await callback_query.message.answer("Please enter the value to convert for " + last_conversion_command + ":")
+    conversion_command = callback_query.data
+    if conversion_command in additional_keyboards:
+        last_conversion_command = conversion_command
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[additional_keyboards[conversion_command]])
+        await callback_query.message.answer("Choose an option:", reply_markup=keyboard)
+    elif conversion_command in conversion_functions:
+        last_conversion_command = conversion_command
+        await callback_query.message.answer("Please enter the value to convert for " + conversion_command + ":")
+    else:
+        await callback_query.message.answer("Invalid conversion option!")
 
 
 # Handle messages containing only numbers

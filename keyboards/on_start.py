@@ -30,7 +30,7 @@ def get_on_start_kb() -> ReplyKeyboardMarkup:  # аннотация, что во
 def get_on_help_kb():
     numbers = [
         "/weather",
-        "2️⃣ Converter",
+        "/converter",
         "/calculator",
         "4️⃣ Rembg",
         "/sticker_kb",

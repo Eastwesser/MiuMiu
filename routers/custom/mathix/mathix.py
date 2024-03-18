@@ -232,13 +232,41 @@ async def handle_conversion_query(callback_query: types.CallbackQuery):
 
 
 # Handle messages containing only numbers
-@router.message(lambda message: message.text.strip().isdigit() and last_conversion_command is not None)
+@router.message(
+    lambda message: message.text.strip().replace('.', '', 1).isdigit()
+                    and last_conversion_command is not None
+)
+
 async def handle_numbers(message: types.Message):
     if last_conversion_command in conversion_functions:
         try:
             number = float(message.text)
             result = conversion_functions[last_conversion_command](number)
-            await message.reply(f"The result is: {result}")
+            # Round the result to 1 decimal place
+            rounded_result = round(result, 1)
+            # Additional info for specific functions
+            additional_info = {
+                "/inches_to_cm": f"Your result is {rounded_result} cm.",
+                "/cm_to_inches": f"Your result is {rounded_result} inches.",
+                "/miles_to_km": f"Your result is {rounded_result} km.",
+                "/km_to_miles": f"Your result is {rounded_result} miles.",
+                "/pounds_to_kg": f"Your result is {rounded_result} kg.",
+                "/kg_to_pounds": f"Your result is {rounded_result} pounds.",
+                "/fahrenheit_to_celsius": f"Your result is {rounded_result} °C.",
+                "/celsius_to_fahrenheit": f"Your result is {rounded_result} °F.",
+                "/ounces_to_ml": f"Your result is {rounded_result} mL.",
+                "/ml_to_ounces": f"Your result is {rounded_result} ounces.",
+                "/gallons_to_liters": f"Your result is {rounded_result} liters.",
+                "/liters_to_gallons": f"Your result is {rounded_result} gallons.",
+                "/feet_to_meters": f"Your result is {rounded_result} meters.",
+                "/meters_to_feet": f"Your result is {rounded_result} feet.",
+                "/yards_to_meters": f"Your result is {rounded_result} meters.",
+                "/meters_to_yards": f"Your result is {rounded_result} yards.",
+                "/cups_to_liters": f"Your result is {rounded_result} liters.",
+                "/liters_to_cups": f"Your result is {rounded_result} cups.",
+            }
+            additional_info_text = additional_info.get(last_conversion_command, "")
+            await message.reply(additional_info_text)
         except ValueError:
             await message.reply("Invalid input. Please enter a valid number.")
     else:

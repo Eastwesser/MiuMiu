@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     bot_token: str
     admin_ids: frozenset[int] = frozenset({42, 5756911009})
     forecast_api: str = "YOUR_WEATHER_API_KEY_HERE"
+    nasa_api: str = "YOUR_NASA_API_KEY_HERE"
 
 
 settings = Settings()

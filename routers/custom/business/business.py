@@ -3,21 +3,23 @@ import json
 import os
 from datetime import datetime, timedelta
 
+import matplotlib.pyplot as plt
 import pytz
 import requests
 from aiogram import Bot
-from aiogram import Router, F
+from aiogram import Router
 from aiogram import types, Dispatcher
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import Message
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from dotenv import load_dotenv
 
+load_dotenv()
+
 bot_token = os.getenv('BOT_TOKEN')
 forecast_api = os.getenv('WEATHER_API_TOKEN')
-load_dotenv()
+nasa_api = os.getenv('NASA_API_TOKEN')
 
 bot = Bot(token=bot_token)
 dp = Dispatcher()
@@ -53,15 +55,17 @@ class WeatherQuery(StatesGroup):
     WaitingForCity = State()
 
 
-city_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-    [
-        KeyboardButton(text="/weather Москва")
+# Reply keyboard for selecting the city
+city_keyboard = ReplyKeyboardMarkup(
+    resize_keyboard=True,
+    keyboard=[
+        [KeyboardButton(text="/weather Москва")]
     ]
-])
+)
 
 
-@router.message(Command("weather_start", prefix="/!%"))
-async def weather_start(message: Message, state: FSMContext):
+# Function to handle /weather_start command
+async def weather_start(message: types.Message, state: FSMContext):
     await message.answer(
         text="Привет! Нажмите кнопку, чтобы выбрать погоду в Москве,\n"
              "либо введите вручную /weather Город,\n"
@@ -71,16 +75,60 @@ async def weather_start(message: Message, state: FSMContext):
     await state.set_state(WeatherQuery.WaitingForCity)
 
 
-@router.message(WeatherQuery.WaitingForCity, F.text.in_(city_keyboard))
-async def ask_city(message: Message, state: FSMContext):
-    await state.update_data(ask_city=message.text.lower())
-    await message.answer(
-        text="Спасибо. Теперь, пожалуйста, введите название города:",
-        reply_markup=city_keyboard,
-    )
-    await state.set_state(WeatherQuery.WaitingForCity)
+# Function to fetch geomagnetic storm data
+async def fetch_geomagnetic_storm_data(api_key: str):
+    """Fetch geomagnetic storm data from NASA API."""
+    url = "https://api.nasa.gov/DONKI/GST"
+    params = {'api_key': api_key}
+    try:
+        response = requests.get(url, params=params)
+        if response.status_code == 200:
+            data = response.json()
+            return data
+        else:
+            print("Error: HTTP status code", response.status_code)
+            return None
+    except requests.RequestException as e:
+        print("Error fetching data:", e)
+        return None
 
 
+# Function to format geomagnetic storm data
+async def format_geomagnetic_storm_data(storm_info: list[dict]) -> str:
+    """Format geomagnetic storm data for display."""
+    formatted_message = "Магнитные бури:\n\n"
+    for storm in storm_info:
+        gst_id = storm.get('gstID', 'N/A')
+        start_time = storm.get('startTime', 'N/A')
+        kp_index = storm.get('allKpIndex', [{'kpIndex': 'N/A'}])[0]['kpIndex']
+        source = storm.get('allKpIndex', [{'source': 'N/A'}])[0]['source']
+        link = storm.get('link', 'N/A')
+
+        formatted_storm = (
+            f"ID бури: {gst_id}\n"
+            f"Начало: {start_time}\n"
+            f"Kp индекс: {kp_index}\n"
+            f"Источник: {source}\n"
+            f"Ссылка: {link}\n\n"
+        )
+        formatted_message += formatted_storm
+
+    return formatted_message
+
+
+# Function to send long message
+async def send_long_message(message: types.Message, text: str):
+    """Send a long message by splitting it into parts."""
+    max_length = 4096
+    if len(text) <= max_length:
+        await message.reply(text)
+    else:
+        parts = [text[i:i + max_length] for i in range(0, len(text), max_length)]
+        for part in parts:
+            await message.reply(part)
+
+
+# Command Handlers
 @router.message(Command("weather"))
 async def get_weather_command(message: types.Message):
     print("Weather command received!")  # Check if the handler is being triggered
@@ -146,6 +194,50 @@ async def get_weather(message: types.Message, city: str):
             f"{weather_translations.get(weather_kind, 'Ясно')}"
         )
 
-    else:
-        print(f"Ошибка при запросе: {res.status_code}")
-        await message.reply("Такого города нет. Введите существующий город, пожалуйста.")
+        geomagnetic_storm_info = await fetch_geomagnetic_storm_data(nasa_api)
+        if geomagnetic_storm_info:
+            formatted_storm_message = await format_geomagnetic_storm_data(geomagnetic_storm_info)
+            await send_long_message(message, formatted_storm_message)
+        else:
+            await send_long_message(message, "Нет данных о магнитных бурях в настоящее время.")
+
+        flare_classes = ['A', 'B', 'C', 'M', 'X']
+        flare_counts = [0, 0, 0, 0, 0]
+
+        for flare in geomagnetic_storm_info:
+            flare_class = flare.get('classType', 'N/A')
+            if flare_class in flare_classes:
+                flare_index = flare_classes.index(flare_class)
+                flare_counts[flare_index] += 1
+
+        plt.figure(figsize=(8, 6))
+        plt.bar(flare_classes, flare_counts, color='skyblue')
+        plt.xlabel('Solar Flare Class')
+        plt.ylabel('Number of Flares')
+        plt.title('Solar Flare Activity')
+        plt.grid(True)
+        plt.show()
+
+        geomagnetic_storm_info = await fetch_geomagnetic_storm_data(nasa_api)
+
+        storm_intensities = ['G1', 'G2', 'G3', 'G4', 'G5']
+        storm_counts = [0, 0, 0, 0, 0]
+
+        if geomagnetic_storm_info:  # Check if data is retrieved successfully
+            for storm in geomagnetic_storm_info:
+                storm_intensity = storm.get('gstClass', 'N/A')
+                if storm_intensity in storm_intensities:
+                    storm_index = storm_intensities.index(storm_intensity)
+                    storm_counts[storm_index] += 1
+
+            plt.figure(figsize=(8, 6))
+            plt.bar(storm_intensities, storm_counts, color='orange')
+            plt.xlabel('Geomagnetic Storm Intensity')
+            plt.ylabel('Number of Storms')
+            plt.title('Geomagnetic Storm Activity')
+            plt.grid(True)
+            plt.show()
+        else:
+            print("Failed to retrieve geomagnetic storm data.")
+            print(f"Ошибка при запросе: {res.status_code}")
+            await message.reply("Такого города нет. Введите существующий город, пожалуйста.")

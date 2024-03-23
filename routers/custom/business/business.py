@@ -12,7 +12,7 @@ from aiogram import types, Dispatcher
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InputFile
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -236,7 +236,18 @@ async def get_weather(message: types.Message, city: str):
             plt.ylabel('Number of Storms')
             plt.title('Geomagnetic Storm Activity')
             plt.grid(True)
-            plt.show()
+            plt.savefig('geomagnetic_storm_activity.png')  # Save the plot as a PNG file
+
+            # Open the PNG image file
+            with open('geomagnetic_storm_activity.png', 'rb') as _:
+                # Get the file path
+                file_path = 'geomagnetic_storm_activity.png'
+
+                # Create an InputFile instance using the file path
+                photo_input_file = InputFile(file_path)
+
+                # Send the PNG image to the user
+                await message.reply_photo(photo_input_file)
         else:
             print("Failed to retrieve geomagnetic storm data.")
             print(f"Ошибка при запросе: {res.status_code}")

@@ -107,6 +107,9 @@ def build_update_mood_kb(
     )
     builder.button(
         text="🔄 Update",
-        callback_data=...,
+        callback_data=CatMoodCbData(
+            action=CatMoodActions.update,
+            **cat_mood_cb_data.model_dump(include={"id", "title", "mood_score"}),
+        ).pack(),
     )
     return builder.as_markup()

@@ -334,7 +334,7 @@ async def handle_conversion_query(callback_query: types.CallbackQuery):
 
 
 @router.message(
-    lambda message: message.text.strip().replace('.', '', 1).isdigit()
+    lambda message: message.text and message.text.strip().replace('.', '', 1).isdigit()
                     and last_conversion_command is not None
 )
 

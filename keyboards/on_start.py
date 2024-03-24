@@ -32,13 +32,13 @@ def get_on_help_kb():
         "/weather",
         "/converter",
         "/calculator",
-        "4️⃣ Rembg",
+        "/food",
         "/sticker_kb",
-        "6️⃣ Filters",
+        "/magnetic_storm",
         "/memes",
-        "8️⃣ Parse Receipt",
+        "/start_blockme",
         "/rps",
-        "0️⃣ Back",
+        "/startblackjack",
     ]
     buttons_row = [KeyboardButton(text=num) for num in numbers]
     #

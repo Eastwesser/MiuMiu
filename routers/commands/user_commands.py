@@ -1,15 +1,15 @@
 import csv
 import io
 import os
+import re
 
 import aiohttp
 from aiogram import Bot
 from aiogram import Router, F
 from aiogram import types, Dispatcher
 from aiogram.enums import ParseMode, ChatAction
-from aiogram.filters import Command, StateFilter
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
+from aiogram.filters import Command
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.utils import markdown
 from aiogram.utils.chat_action import ChatActionSender
@@ -199,61 +199,174 @@ async def send_shop_message_kb(message: types.Message):
     )
 
 
-# TASTY FOOD SHOP
+# TASTY FOOD SHOP ======================================================================================================
 available_food_names = ["Суши", "Спагетти", "Хачапури"]
 available_food_sizes = ["Маленькую", "Среднюю", "Большую"]
+available_drink_names = ["Чай", "Кофе", "Сок"]
 
+# Define a dictionary to store user data
+user_data = {}
 
+# Define states for the order process
 class OrderFood(StatesGroup):
     choosing_food_name = State()
     choosing_food_size = State()
 
 
+class OrderDrink(StatesGroup):
+    choosing_drink_name = State()
+
+
+class OrderEmailPhone(StatesGroup):
+    awaiting_contact_info = State()
+
+
+def calculate_total_price(chosen_food: str, chosen_drink: str = None) -> int:
+    """
+    Calculate the total price of the order based on the selected food and drink items.
+
+    Args:
+        chosen_food (str): The chosen food item.
+        chosen_drink (str, optional): The chosen drink item. Defaults to None if no drink is chosen.
+
+    Returns:
+        int: The total price of the order.
+    """
+    # Define placeholder prices for food items
+    food_prices = {
+        "Суши": 300,
+        "Спагетти": 250,
+        "Хачапури": 200,
+    }
+
+    # Define placeholder prices for drink items
+    drink_prices = {
+        "Чай": 100,
+        "Кофе": 150,
+        "Сок": 120,
+    }
+
+    total_price = food_prices.get(chosen_food, 0)  # Get the price of the chosen food item, default to 0 if not found
+
+    # Add the price of the chosen drink item if any
+    if chosen_drink:
+        total_price += drink_prices.get(chosen_drink, 0)
+
+    return total_price
+
+
+# Define functions to validate email and phone number
+def validate_email(email: str) -> bool:
+    # Split the email by "@"
+    parts = email.split("@")
+
+    # Check if there are exactly two parts
+    if len(parts) != 2:
+        return False
+
+    # Check if both parts have content
+    if not parts[0] or not parts[1]:
+        return False
+
+    # Check if there are more than one "@" symbol
+    if "@" in parts[1][1:]:
+        return False
+
+    # Check if there are any invalid characters in domain part
+    invalid_chars = set("!#$%^&*()=+{}[]|;:,<>")
+    if any(char in invalid_chars for char in parts[1]):
+        return False
+
+    # Check if the domain part has at least one dot
+    if "." not in parts[1]:
+        return False
+
+    # Check if the email has at least one character before and after "@"
+    if not parts[0] or not parts[1]:
+        return False
+
+    return True
+
+
+def validate_phone(phone: str) -> bool:
+    # Define the regex pattern for the phone number format
+    pattern = r'^\+7\(\d{3}\)\d{3}-\d{2}-\d{2}$'
+
+    # Use re.match to check if the phone number matches the pattern
+    if re.match(pattern, phone):
+        return True
+    else:
+        return False
+
+
 @router.message(Command("food"))
-async def cmd_food(message: Message, state: FSMContext):
+async def cmd_food(message: Message):
     await message.answer(
         text="Выберите блюдо:",
         reply_markup=make_row_keyboard(available_food_names)
     )
-    # Устанавливаем пользователю состояние "выбирает название"
-    await state.set_state(OrderFood.choosing_food_name)
 
 
-@router.message(OrderFood.choosing_food_name, F.text.in_(available_food_names))
-async def food_chosen(message: Message, state: FSMContext):
-    await state.update_data(chosen_food=message.text.lower())
+@router.message(F.text.in_(available_food_names))
+async def food_chosen(message: Message):
+    chosen_food = message.text.lower()
+    user_data['chosen_food'] = chosen_food
     await message.answer(
         text="Спасибо. Теперь, пожалуйста, выберите размер порции:",
         reply_markup=make_row_keyboard(available_food_sizes)
     )
-    await state.set_state(OrderFood.choosing_food_size)
 
 
-@router.message(StateFilter("OrderFood:choosing_food_name"))
-async def food_chosen_incorrectly(message: Message):
+@router.message(F.text.in_(available_food_sizes))
+async def food_size_chosen(message: Message):
+    chosen_food_size = message.text.lower()
+    chosen_food = user_data.get('chosen_food')
     await message.answer(
-        text="Я не знаю такого блюда.\n\n"
-             "Пожалуйста, выберите одно из названий из списка ниже:",
-        reply_markup=make_row_keyboard(available_food_names)
-    )
-
-
-@router.message(OrderFood.choosing_food_size, F.text.in_(available_food_sizes))
-async def food_size_chosen(message: Message, state: FSMContext):
-    user_data = await state.get_data()
-    await message.answer(
-        text=f"Вы выбрали {message.text.lower()} порцию {user_data['chosen_food']}.\n"
+        text=f"Вы выбрали {chosen_food_size} порцию {chosen_food}.\n"
              f"Попробуйте теперь заказать напитки: /drinks",
         reply_markup=ReplyKeyboardRemove()
     )
-    # Сброс состояния и сохранённых данных у пользователя
-    await state.clear()
 
 
-@router.message(OrderFood.choosing_food_size)
-async def food_size_chosen_incorrectly(message: Message):
+@router.message(Command("drinks"))
+async def cmd_drinks(message: Message):
     await message.answer(
-        text="Я не знаю такого размера порции.\n\n"
-             "Пожалуйста, выберите один из вариантов из списка ниже:",
-        reply_markup=make_row_keyboard(available_food_sizes)
+        text="Выберите напиток:",
+        reply_markup=make_row_keyboard(available_drink_names)
+    )
+
+
+@router.message(F.text.in_(available_drink_names))
+async def drink_chosen(message: Message):
+    chosen_drink = message.text.lower()
+    user_data['chosen_drink'] = chosen_drink
+    await message.answer(
+        text="Спасибо. Что-нибудь еще?",
+        reply_markup=make_row_keyboard(["Добавить порцию", "Да, всё"])
+    )
+
+
+@router.message(F.text.isin(["Добавить порцию", "Да, всё"]))
+async def anything_else(message: Message):
+    choice = message.text
+    if choice == "Добавить порцию":
+        await message.answer(
+            text="Выберите блюдо:",
+            reply_markup=make_row_keyboard(available_food_names)
+        )
+    else:
+        total_price = calculate_total_price(user_data["chosen_food"], user_data.get("chosen_drink"))
+        await message.answer(
+            text=f"Ваш заказ:\n\n"
+                 f"- Блюдо: {user_data['chosen_food']}\n"
+                 f"- Напиток: {user_data.get('chosen_drink', 'Нет')}\n"
+                 f"Общая стоимость: {total_price} руб.\n\n"
+                 "Введите ваше имя и фамилию, адрес электронной почты и номер телефона для связи:"
+        )
+
+
+@router.message
+async def handle_message(message: Message):
+    await message.answer(
+        text="Выберите напиток или продолжите оформление заказа:"
     )

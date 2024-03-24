@@ -267,20 +267,3 @@ async def process_blockme_attack(callback_query: types.CallbackQuery):
     else:
         # Build the keyboard and send the message for the next round
         await asyncio.sleep(5)
-        # await build_blockme_kb(callback_query.message)
-
-
-# async def build_blockme_kb(message: types.Message):
-#     # Creating inline keyboard markup
-#     block_me_kb = InlineKeyboardMarkup(
-#         inline_keyboard=[
-#             [
-#                 InlineKeyboardButton(text="^", callback_data="hit_head"),
-#                 InlineKeyboardButton(text=">", callback_data="hit_chest"),
-#                 InlineKeyboardButton(text="v", callback_data="hit_legs")
-#             ]
-#         ]
-#     )
-#
-#     # Send the message with the keyboard
-#     await message.answer("Round 1. Player 2, choose an attack:", reply_markup=block_me_kb)

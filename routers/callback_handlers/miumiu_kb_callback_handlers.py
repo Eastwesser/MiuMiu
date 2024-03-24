@@ -8,7 +8,9 @@ from keyboards.inline_keyboards.miumiu_kb import (
     build_miumiu_kb,
     build_meow_hiss_kb,
     CatMoodActions,
-    CatMoodCbData, cat_mood_details_kb, build_update_mood_kb,
+    CatMoodCbData,
+    cat_mood_details_kb,
+    build_update_mood_kb,
 )
 
 router = Router(name=__name__)
@@ -84,6 +86,10 @@ async def handle_product_delete_button(
     )
 
 
+def build_update_mood_text(cat_mood_cb_data: CatMoodCbData) -> str:
+    return f"Update mood for sound '{cat_mood_cb_data.title}'"
+
+
 @router.callback_query(
     CatMoodCbData.filter(F.action == CatMoodActions.update)
 )
@@ -92,6 +98,25 @@ async def handle_product_update_button(
         callback_data: CatMoodCbData,
 ):
     await call.answer()
-    await call.message.edit_reply_markup(
-        reply_markup=build_update_mood_kb(callback_data),
-    )
+
+    # Check if the current message content and reply markup are the same as the new ones
+    current_text = call.message.text or ""
+    current_reply_markup = call.message.reply_markup or ""
+    new_text = build_update_mood_text(callback_data)
+    new_reply_markup = build_update_mood_kb(callback_data)
+
+    print("Current text:", current_text)
+    print("New text:", new_text)
+    print("Current reply markup:", current_reply_markup)
+    print("New reply markup:", new_reply_markup)
+
+    # Compare the current and new text and reply markup
+    if current_text == new_text and current_reply_markup == new_reply_markup:
+        # Do nothing if both the content and markup are the same
+        return
+    else:
+        # If the content or markup is different, edit the message
+        await call.message.edit_text(
+            text=new_text,
+            reply_markup=new_reply_markup,
+        )

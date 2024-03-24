@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import random
 from typing import Any, Awaitable, Callable, Dict
@@ -17,9 +18,9 @@ WINS_REQUIRED = 3
 BLACKJACK_FACES = ["❤️", "♠️", "♦️", "♣️"]
 BLACKJACK_VALUES = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 
+round_number = 1
 health_p1 = 10
 health_p2 = 10
-round_number = 1
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -70,7 +71,7 @@ def determine_winner(user_choice, bot_choice):
         return "Bot wins!"
 
 
-# DICE EMOJI BOT
+# DICE EMOJI BOT =======================================================================================================
 @router.message(Command("bowling", prefix="!/"))
 async def play_games(message: Message):
     x = await message.answer_dice(DiceEmoji.BOWLING)
@@ -107,7 +108,7 @@ async def play_games2(message: Message):
     print(x.dice.value)
 
 
-# BLACKJACK
+# BLACKJACK ============================================================================================================
 class BlackjackMiddleware(BaseMiddleware):
     async def __call__(
             self,
@@ -216,7 +217,6 @@ def reset_game():
 
 
 # BLOCK ME =============================================================================================================
-# Handler for starting the Block Me game
 @router.message(Command("start_blockme", prefix="!/"))
 async def start_blockme_game(message: types.Message):
     global round_number, health_p1, health_p2
@@ -238,7 +238,7 @@ async def start_blockme_game(message: types.Message):
     await message.answer("Round 1. Player 2, choose an attack:", reply_markup=block_me_kb)
 
 
-@router.callback_query(lambda callback_query: callback_query.data in ["hit_head", "hit_chest", "hit_legs"])
+@router.callback_query(lambda callback_query: callback_query.data.startswith("hit_"))
 async def process_blockme_attack(callback_query: types.CallbackQuery):
     global health_p1, health_p2, round_number
     choice_p2 = callback_query.data
@@ -259,21 +259,28 @@ async def process_blockme_attack(callback_query: types.CallbackQuery):
                                  f"Player 1 health: {health_p1}\n"
                                  f"Player 2 health: {health_p2}")
 
-    # Build the keyboard and send the message
-    await build_blockme_kb(callback_query.message)
+    # Check if any player's health is 0 or below
+    if health_p1 <= 0:
+        await callback_query.message.reply("Player 1 is defeated! GAME OVER")
+    elif health_p2 <= 0:
+        await callback_query.message.reply("Player 2 is defeated! GAME OVER")
+    else:
+        # Build the keyboard and send the message for the next round
+        await asyncio.sleep(5)
+        # await build_blockme_kb(callback_query.message)
 
 
-async def build_blockme_kb(message: types.Message):
-    # Creating inline keyboard markup
-    block_me_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="^", callback_data="hit_head"),
-                InlineKeyboardButton(text=">", callback_data="hit_chest"),
-                InlineKeyboardButton(text="v", callback_data="hit_legs")
-            ]
-        ]
-    )
-
-    # Send the message with the keyboard
-    await message.answer("Round 1. Player 2, choose an attack:", reply_markup=block_me_kb)
+# async def build_blockme_kb(message: types.Message):
+#     # Creating inline keyboard markup
+#     block_me_kb = InlineKeyboardMarkup(
+#         inline_keyboard=[
+#             [
+#                 InlineKeyboardButton(text="^", callback_data="hit_head"),
+#                 InlineKeyboardButton(text=">", callback_data="hit_chest"),
+#                 InlineKeyboardButton(text="v", callback_data="hit_legs")
+#             ]
+#         ]
+#     )
+#
+#     # Send the message with the keyboard
+#     await message.answer("Round 1. Player 2, choose an attack:", reply_markup=block_me_kb)

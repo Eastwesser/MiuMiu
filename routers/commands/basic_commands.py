@@ -31,7 +31,7 @@ async def handle_start(message: types.Message):
 @router.message(Command("help", prefix="!/"))  # added in m1, and prefix="!/" in m3
 async def handle_help(message: types.Message):
     text = markdown.text(
-        markdown.markdown_decoration.quote("I'm an {echo} bot."),
+        markdown.markdown_decoration.quote("I'm MiuMiu, your personal little helper!"),
         markdown.text(
             "Send me",
             markdown.markdown_decoration.bold(

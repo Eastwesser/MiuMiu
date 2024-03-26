@@ -53,7 +53,7 @@ def get_on_help_kb():
     # builder.button(text=num) то же самое, что и сверху
     # builder.adjust(3, 3, 4)  # все строчки будут перестроены, чтобы было по 3 символа в строке (3);
     builder.adjust(3)
-    builder.row(buttons_row[3], buttons_row[1])  # сюда добавляем кнопки, располагаются в одну новую строчку
+    # builder.row(buttons_row[3], buttons_row[1]) # сюда добавляем кнопки, располагаются в одну новую строчку
     # builder.add(buttons_row[-1])
     # и 3 значения на первой строке, 3 на второй, 4 на последней, если указывать явно (3,3,4)
     return builder.as_markup(resize_keyboard=False)  # возвращаем builder как markup, чтобы у нас была разметка

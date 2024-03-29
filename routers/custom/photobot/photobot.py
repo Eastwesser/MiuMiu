@@ -256,4 +256,23 @@ async def kittens_handler(message: types.Message):
     sticker_id = 'CAACAgIAAxkBAT_q_mXeZb3RFKlAR4yp5GbS0nfsH0kbAAL9PQACIgzxSsCa0NR6qOSDNAQ'
     await send_sticker(message.chat.id, sticker_id)
 
+
 # ======================================================================================================================
+@router.message(Command("presentation", prefix="!/"))
+async def send_presentation(message: types.Message):
+    presentations_dir = os.path.join(os.path.dirname(__file__), "presentations")
+
+    if not os.path.exists(presentations_dir):
+        await message.answer("Sorry, the presentations are not available at the moment.")
+        return
+
+    presentations = [f for f in os.listdir(presentations_dir) if f.endswith('.pptx')]
+
+    if not presentations:
+        await message.answer("Sorry, there are no presentations available at the moment.")
+        return
+
+    presentation_path = os.path.join(presentations_dir, presentations[0])
+
+    # Send the presentation using types.InputFile
+    await message.answer_document(types.FSInputFile(presentation_path, presentations[0]))

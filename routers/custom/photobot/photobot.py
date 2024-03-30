@@ -258,6 +258,7 @@ async def kittens_handler(message: types.Message):
 
 
 # ======================================================================================================================
+# You can add presentations into the 'presentations' folder of PhotoBot
 @router.message(Command("presentation", prefix="!/"))
 async def send_presentation(message: types.Message):
     presentations_dir = os.path.join(os.path.dirname(__file__), "presentations")

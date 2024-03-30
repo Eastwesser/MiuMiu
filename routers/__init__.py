@@ -12,6 +12,7 @@ from .custom.business import router as business_router
 from .custom.games import router as games_router
 from .custom.mathix import router as mathix_router
 from .custom.photobot import router as photobot_router
+from .survey import router as survey_router
 
 # здесь мы уже импортируем из COMMANDS
 
@@ -23,6 +24,7 @@ router = Router(name=__name__)
 
 router.include_routers(callback_router,
                        commands_router,
+                       survey_router,
                        media_router,
                        business_router,
                        games_router,

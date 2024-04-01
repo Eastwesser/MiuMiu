@@ -1,4 +1,5 @@
 import os
+import random
 
 import aiohttp
 from aiogram import Bot, types, Dispatcher
@@ -19,26 +20,23 @@ dp = Dispatcher()
 router = Router(name=__name__)
 
 # MEME BOX
-MEME_COUNT = 10
+MEME_COUNT = 24
 
 
 @router.message(Command("memes", prefix="!/"))
-async def give_meme(message: types.Message):
+async def give_random_meme(message: types.Message):
     folder_path = os.path.join(os.getcwd(), "routers", "custom", "photobot", "meme_box")
-    file_count = len([name for name in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, name))])
+    files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
 
-    if file_count == 0:
+    if not files:
         await message.reply("No memes found :(")
         return
 
-    for i in range(1, file_count + 1):
-        file_name = str(i) + ".jpg"
-        file_path = os.path.join(folder_path, file_name)
+    random_meme = random.choice(files)
+    file_path = os.path.join(folder_path, random_meme)
 
-        photo = FSInputFile(file_path)
-        await message.reply_photo(photo, caption="Here you are")
-
-    await message.reply("That's all for now :3")
+    photo = FSInputFile(file_path)
+    await message.reply_photo(photo, caption="Here you are")
 
 
 @router.message(Command("actions", prefix="!/"))

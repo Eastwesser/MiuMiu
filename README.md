@@ -1,25 +1,52 @@
-# Miumiu
+# MiuMiu
 
-Creating a new Telegram bot using asyncio and aiogram 😎
+MiuMiu, your friendly Telegram bot, has undergone exciting updates, bringing a plethora of new features to enhance your
+chatting experience. Powered by asyncio and aiogram, MiuMiu is now smarter and more versatile than ever before! 😎
 
-This Telegram bot, built with the Aiogram library for Python, offers an array of features:
+## Features
 
-**Cat Pictures**: Enjoy adorable pictures of cats on request.
+**Weather Updates**: Receive real-time weather forecasts with detailed information on timing and atmospheric pressure,
+courtesy of OpenWeatherAPI.
 
-**Text Samples**: Get interesting text samples or quotes whenever you want.
+**Magnetic Storm Alerts**: Stay informed about magnetic storms using data from NASA tokens.
 
-However, the bot is still a work in progress, with more features in the pipeline:
+**Calculator and Metric Converter**: Perform quick calculations and metric conversions right within your chat.
 
-**Weather Forecasts**: Get weather updates for any location, 
-including pressure readings indicating whether it's low, normal, or high. 
-Humidity data will be added in the future.
+**Interactive Games**: Enjoy a variety of games including Rock, Paper, Scissors (RPS), BlockMe, Blackjack, and DiceEmoji
+for endless entertainment.
 
-**Basic Calculations**: Perform simple mathematical operations like 
-addition, multiplication, division, and subtraction directly in the chat.
+**Memes and Stickers**: Spice up your conversations with hilarious memes and stickers.
 
-**Interactive Games**: Play games such as Rock, Paper, Scissors (RPS) and more for a fun time within the chat.
+## Upcoming Features
 
-**Memes and Stickers**: Request memes and stickers for a dose of humor.
+MiuMiu is continuously evolving to bring you even more functionality in the future:
 
-Feel free to interact with the bot and explore its current functionalities. 
-Stay tuned for exciting updates and new features as we continue to enhance its capabilities!
+**Photobot Enhancements**: Expect additions like masks, frames, filters similar to Instagram, and the ability to send
+presentations like quick Python guides.
+
+**Business Bot**: Transform MiuMiu into a versatile business assistant capable of checking currency rates online,
+providing information from Wikipedia during conversations, setting up a shop for purchasing food items, and integrating
+FreeGPT for engaging chat experiences.
+
+## Installation
+
+To install the necessary dependencies, MiuMiu utilizes Poetry. If you prefer requirements.txt, here are the required
+libraries:
+
+```plaintext
+aiogram~=3.3.0
+aiohttp==3.9.3
+asyncio==3.4.3
+magic_filter==1.0.12
+pydantic_settings==2.2.1
+python-dotenv==1.0.1
+requests~=2.31.0
+DateTime~=5.4
+pytz~=2021.3
+rembg==2.0.52
+pytesseract==0.3.10
+Pillow==10.0.1
+```
+
+Feel free to interact with MiuMiu and explore its current functionalities.
+Stay tuned for updates and new features as we continue to enhance its capabilities! 🚀

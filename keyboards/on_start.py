@@ -96,3 +96,10 @@ def get_actions_kb() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
     )
     # NOTE: resize_keyboard=True позволяет нормализовать размер кнопки
+
+def build_yes_or_no_keyboard() -> ReplyKeyboardMarkup:
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="Yes")
+    builder.button(text="No")
+    # builder.adjust(1)  # по одной кнопке на строке
+    return builder.as_markup(resize_keyboard=True)

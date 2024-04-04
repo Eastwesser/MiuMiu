@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
+import openai
 import pytz
 import requests
 from aiogram import Bot, F
@@ -19,6 +20,7 @@ load_dotenv()
 bot_token = os.getenv('BOT_TOKEN')
 forecast_api = os.getenv('WEATHER_API_TOKEN')
 nasa_api = os.getenv('NASA_API_TOKEN')
+openai.api_key = os.getenv('OPEN_AI_TOKEN')
 
 bot = Bot(token=bot_token)
 dp = Dispatcher()
@@ -52,6 +54,10 @@ weather_stickers = {
 
 class WeatherQuery(StatesGroup):
     WaitingForCity = State()
+
+
+class Questioning(StatesGroup):
+    Asking = State()
 
 
 city_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
@@ -225,3 +231,35 @@ async def get_magnetic_storm_data(message: types.Message):
         await send_long_message(message, formatted_storm_message)
     else:
         await send_long_message(message, "Нет данных о магнитных бурях в настоящее время.")
+
+
+# CHAT GPT =============================================================================================================
+async def ask_chatgpt(question):
+    response = openai.Completion.create(
+        engine="text-davinci-002",
+        prompt=question,
+        max_tokens=1500
+    )
+    return response.choices[0].text.strip()
+
+
+# Modify your existing function to handle asking questions
+@router.message(Command("ask_question", prefix="/!%"))
+async def start_questioning(message: types.Message, state: FSMContext):
+    await state.set_state(Questioning.Asking)
+    await message.answer(
+        "Привет! Задайте ваш вопрос.",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+
+@router.message()
+async def answer_question(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state == Questioning.Asking:
+        # Get the user's question
+        question = message.text
+        # Call ChatGPT to answer the question
+        response = await ask_chatgpt(question)
+        await message.answer(response)
+        # Finish the conversation
+        await state.clear()

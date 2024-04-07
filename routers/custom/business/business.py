@@ -496,6 +496,8 @@ async def get_magnetic_storm_data(message: types.Message):
 # Initialize Wikipedia API
 class LanguageState(StatesGroup):
     choose_language = State()  # State for choosing language
+    english = State()  # State for English language
+    russian = State()  # State for Russian language
 
 # Keyboard for language selection
 language_keyboard = ReplyKeyboardMarkup(
@@ -517,30 +519,47 @@ async def welcome(message: types.Message, state: FSMContext):
         reply_markup=language_keyboard
     )
 
-# Message handler for other messages
-@router.message(LanguageState.choose_language, F.text)
-async def talk(message: types.Message, state: FSMContext):
-    if message.text == 'Hello':
-        await message.answer('Hello, how are you?')
-    else:
-        query = message.text.replace(' ', '_')
-        try:
-            page = wikipedia.page(query)
-            await message.answer(page.summary)
-            await state.clear()
-        except Exception as e:
-            await message.answer('No information found for this query!')
-
-# Message handler for language selection
-@router.message(LanguageState.choose_language, F.text & (F.text == 'English' | F.text == 'Russian'))
+@router.message(LanguageState.choose_language, F.text.in_(["English", "Russian"]))
 async def select_language(message: types.Message, state: FSMContext):
     language = message.text.lower()
-    if language == 'english':
-        await state.set_state("English")
+    await state.update_data(language=language)
+    if language == "english":
+        await state.set_state(LanguageState.english)
         await message.answer("You selected English language.")
-    elif language == 'russian':
-        await state.set_state("Russian")
+    elif language == "russian":
+        await state.set_state(LanguageState.russian)
         await message.answer("Вы выбрали русский язык.")
-    else:
-        await message.answer("Please select a language using the provided keyboard.")
-        await state.clear()
+
+# Message handler for English language
+@router.message(LanguageState.english)
+async def handle_english(message: types.Message, state: FSMContext):
+    query = message.text
+    try:
+        search_results = wikipedia.search(query)
+        if search_results:
+            page = wikipedia.page(search_results[0])
+            await message.answer(page.summary)
+        else:
+            await message.answer('No information found for this query!')
+    except Exception as e:
+        await message.answer('No information found for this query!')
+
+# Message handler for Russian language
+@router.message(LanguageState.russian)
+async def handle_russian(message: types.Message, state: FSMContext):
+    wikipedia.set_lang("ru")
+    query = message.text
+    try:
+        search_results = wikipedia.search(query)
+        if search_results:
+            page = wikipedia.page(search_results[0])
+            await message.answer(page.summary)
+        else:
+            await message.answer('Нет информации по вашему запросу!')
+    except Exception as e:
+        await message.answer('Нет информации по вашему запросу!')
+
+# Message handler for other messages
+@router.message(LanguageState.choose_language)
+async def invalid_language(message: types.Message, state: FSMContext):
+    await message.answer("Please select a language using the provided keyboard.")

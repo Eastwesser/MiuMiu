@@ -20,6 +20,8 @@ datetime = "^5.5"
 pytz = "^2024.1"
 pytesseract = "^0.3.10"
 pillow = "^10.2.0"
+forex-python = "^1.8"
+langdetect = "^1.0.9"
 
 
 [tool.poetry.group.dev.dependencies]

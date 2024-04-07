@@ -1,18 +1,11 @@
-# Example 1: for loop
-for i in range(5):
-    print(i)
+def bubble_sort(arr):
+    n = len(arr)
+    for i in range(n):
+        for j in range(0, n-i-1):
+            if arr[j] > arr[j+1]:
+                arr[j], arr[j+1] = arr[j+1], arr[j]
 
-# Example 2: while loop
-num = 0
-while num < 5:
-    print(num)
-    num += 1
-
-# Example 3: if-elif-else statements
-x = 10
-if x > 10:
-    print("x is greater than 10")
-elif x == 10:
-    print("x is equal to 10")
-else:
-    print("x is less than 10")
+# Example usage:
+my_list = [5, 3, 8, 1, 2]
+bubble_sort(my_list)
+print(my_list)

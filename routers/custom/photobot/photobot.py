@@ -2,16 +2,22 @@ import os
 import random
 
 import aiohttp
+import requests
 from aiogram import Bot, types, Dispatcher
 from aiogram import Router
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import FSInputFile
+from aiogram.types import Message
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from dotenv import load_dotenv
 
 from keyboards.inline_keyboards.actions_kb import build_actions_kb
 
 bot_token = os.getenv('BOT_TOKEN')
+deep_ai_key = os.getenv('DEEP_AI_TOKEN')
+
 load_dotenv()
 
 bot = Bot(token=bot_token)
@@ -21,6 +27,10 @@ router = Router(name=__name__)
 
 # MEME BOX
 MEME_COUNT = 24
+
+
+class Questioning(StatesGroup):
+    Asking = State()
 
 
 @router.message(Command("memes", prefix="!/"))
@@ -275,3 +285,84 @@ async def send_presentation(message: types.Message):
 
     # Send the presentation using types.InputFile
     await message.answer_document(types.FSInputFile(presentation_path, presentations[0]))
+
+
+# Text to Image ========================================================================================================
+# CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+# FILE_NAME = 'deep_ai_txt.txt'
+# FILE_PATH = os.path.join(CURRENT_DIRECTORY, FILE_NAME)
+#
+#
+# # Function to generate an image from text using DeepAI API
+# async def generate_image_from_text(text: str, deep_ai_key: str) -> str:
+#     try:
+#         response = requests.post(
+#             "https://api.deepai.org/api/text2img",
+#             data={'text': text},
+#             headers={'api-key': deep_ai_key}
+#         )
+#         response.raise_for_status()  # Raise an exception for HTTP errors
+#         response_json = response.json()
+#         output_url = response_json.get("output_url")
+#         if output_url:
+#             return output_url
+#         else:
+#             return "Sorry, I couldn't generate an image at the moment."
+#     except requests.exceptions.RequestException as e:
+#         return f"Error: {e}"
+#
+#
+# # Handler for the /photo_deep_ai command
+# @router.message(Command("photo_deep_ai", prefix="!/"))
+# async def ask_photo_gpt_deep_ai(message: Message):
+#     deep_ai_key = os.getenv('DEEP_AI_KEY')
+#     if not deep_ai_key:
+#         await message.answer("DeepAI API key is not configured properly.")
+#         return
+#
+#     print("File path:", FILE_PATH)  # Debug statement
+#
+#     # Read text from the file
+#     try:
+#         with open(FILE_PATH, 'r', encoding='utf-8') as file:
+#             text = file.read()
+#             print("Text from file:", text)  # Debug statement
+#     except FileNotFoundError:
+#         await message.answer("Sorry, the text file is not found.")
+#         return
+#     except Exception as e:
+#         await message.answer(f"An error occurred while reading the file: {str(e)}")
+#         return
+#
+#     # Generate image from text
+#     output_url = await generate_image_from_text(text, deep_ai_key)
+#     await message.answer_photo(output_url)
+#
+#
+# # Handler for the /ask_deep_ai command
+# @router.message(Command("ask_deep_ai", prefix="!/"))
+# async def start_photo_deep_ai(message: Message):
+#     await message.answer("Привет! Задайте ваш вопрос.")
+#     # Set the state if needed
+#
+#
+# # Handler for all other messages
+# @router.message()
+# async def answer_photo_deep_ai(message: Message, state: FSMContext):
+#     # Get the current state directly
+#     current_state = await state.get_state()
+#
+#     if current_state == Questioning.Asking:
+#         question = message.text
+#         deep_ai_key = os.getenv('DEEP_AI_KEY')
+#
+#         if not deep_ai_key:
+#             await message.answer("DeepAI API key is not configured properly.")
+#             return
+#
+#         # Generate image from text
+#         output_url = await generate_image_from_text(question, deep_ai_key)
+#         await message.answer_photo(output_url)
+#
+#         # Clear the state if using FSM
+#         await state.clear()

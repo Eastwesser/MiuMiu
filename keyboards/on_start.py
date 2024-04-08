@@ -36,9 +36,9 @@ def get_on_help_kb():
         "/sticker_kb",
         "/magnetic_storm",
         "/memes",
-        "/start_blockme",
+        "/start_block_me",
         "/rps",
-        "/startblackjack",
+        "/start_blackjack",
     ]
     buttons_row = [KeyboardButton(text=num) for num in numbers]
     #

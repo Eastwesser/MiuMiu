@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import re
 from datetime import datetime, timedelta
 
 from aiogram.enums import ParseMode
@@ -42,7 +43,6 @@ deep_ai_key = os.getenv('DEEP_AI_TOKEN')
 
 bot = Bot(token=bot_token)
 dp = Dispatcher(bot=bot, storage=MemoryStorage())
-# dp = Dispatcher(storage=MemoryStorage())
 
 currency_converter = CurrencyRates()
 
@@ -345,100 +345,6 @@ async def get_magnetic_storm_data(message: types.Message):
 #         logging.exception("An error occurred while calling the DeepAI API")
 #         return "Sorry, an error occurred while processing your request."
 #
-# # Modify your existing function to handle asking questions
-# @router.message(Command("ask_question", prefix="/!%"))
-# async def start_questioning_deep_ai(message: types.Message, state: FSMContext):
-#     await state.set_state(Questioning.Asking)
-#     await message.answer(
-#         "Привет! Задайте ваш вопрос.",
-#         reply_markup=types.ReplyKeyboardRemove(),
-#     )
-#
-# @router.message()
-# async def answer_question_deep_ai(message: types.Message, state: FSMContext):
-#     current_state = await state.get_state()
-#     if current_state == Questioning.Asking:
-#         # Get the user's question
-#         question = message.text
-#         # Call ChatGPT to answer the question
-#         response = await ask_gpt_deep_ai(question)
-#         await message.answer(response)
-#         # Finish the conversation
-#         await state.clear()
-
-# Function to search and retrieve Wikipedia content
-# Function to search Wikipedia
-# Initialize Wikipedia
-# Set the language for Wikipedia
-# Set the language for Wikipedia
-
-
-
-# wikipedia.set_lang("en")
-#
-# # Initialize bot and dispatcher
-# storage = MemoryStorage()
-#
-# # Define the keyboard
-# wiki_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-#     [
-#         KeyboardButton(text="WIKI")
-#     ]
-# ])
-#
-#
-# # Define states
-# class WikipediaStates(StatesGroup):
-#     SEARCHING = State()
-#
-#
-# # Command to start searching Wikipedia
-# @router.message(Command("ask_wiki", prefix="/!%"))
-# async def ask_wiki_command(message: types.Message, state: FSMContext):
-#     await message.answer(
-#         "Ask your question, what is it?",
-#         reply_markup=wiki_keyboard
-#     )
-#     await state.set_state(WikipediaStates.SEARCHING)
-#
-#
-# # Handler for receiving user's question and searching Wikipedia
-# @router.message(WikipediaStates.SEARCHING, F.text.in_(wiki_keyboard))
-# async def search_wikipedia(message: Message, state: FSMContext):
-#     await state.update_data(search_wikipedia=message.text.lower())
-#     await message.answer(
-#         "What do you want to know about? Please type your question.",
-#     )
-#
-#
-# @router.message(Command("wiki", prefix="/!%"))
-# async def get_wiki_command(message: types.Message):
-#     print("Wiki command recieved!")
-#     # Get the user's question
-#     query = message.text
-#     try:
-#         # Search Wikipedia for the query
-#         search_results = wikipedia.search(query)
-#         if search_results:
-#             # Get the content of the first search result
-#             page_title = search_results[0]
-#             page_content = wikipedia.page(page_title).content
-#             # Extract the first five sentences from the content
-#             first_five_sentences = ". ".join(page_content.split(". ")[:5])
-#             await message.answer(first_five_sentences)
-#         else:
-#             await message.answer("No results found.")
-#     except wikipedia.exceptions.DisambiguationError as e:
-#         # If there are multiple possible matches, provide suggestions
-#         suggestions = ", ".join(e.options)
-#         await message.answer(f"Multiple results found. Try refining your search. Suggestions: {suggestions}")
-#     except wikipedia.exceptions.PageError:
-#         await message.answer("No results found.")
-#     finally:
-#         # Clear the state
-#         print(f"Ошибка при запросе")
-
-
 # CURRENCY CONVERTER ===================================================================================================
 # Command to start currency conversion
 # @router.message(Command("convert"))
@@ -498,6 +404,14 @@ class LanguageState(StatesGroup):
     choose_language = State()  # State for choosing language
     english = State()  # State for English language
     russian = State()  # State for Russian language
+    stop_wiki = State()  # State for stopping Wikipedia
+
+# Define a new callback data factory for the "clear_wiki_state" button
+class ClearWikiCallbackFactory(CallbackData, prefix="clear_wiki"):
+    pass
+
+class BackCallbackFactory(CallbackData, prefix="back"):
+    pass
 
 # Keyboard for language selection
 language_keyboard = ReplyKeyboardMarkup(
@@ -505,17 +419,26 @@ language_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
             KeyboardButton(text="English"),
-            KeyboardButton(text="Russian")
+            KeyboardButton(text="Russian"),
         ],
 ])
 
+clear_state_keyboard = ReplyKeyboardMarkup(
+    resize_keyboard=True,
+    keyboard=[
+        [
+            KeyboardButton(text="Stop asking Wiki"),
+        ],
+    ],
+)
+
 # Command handler for /wiki command
 @router.message(Command("wiki", prefix="/!%"))
-async def welcome(message: types.Message, state: FSMContext):
+async def welcome_wiki(message: types.Message, state: FSMContext):
     await state.set_state(LanguageState.choose_language)
     await message.answer(
-        "Hi! I'm Wikipedia.\n"
-        "Please select your language.",
+        "Now we can use Wikipedia to parse simple info.\n"
+        "Please select your language. ^w^",
         reply_markup=language_keyboard
     )
 
@@ -525,24 +448,32 @@ async def select_language(message: types.Message, state: FSMContext):
     await state.update_data(language=language)
     if language == "english":
         await state.set_state(LanguageState.english)
-        await message.answer("You selected English language.")
+        await message.answer("You selected English language.\n"
+                             "Ask 1-2 words or press 'Back' to clear the state:",
+                             reply_markup=clear_state_keyboard)
     elif language == "russian":
         await state.set_state(LanguageState.russian)
-        await message.answer("Вы выбрали русский язык.")
+        await message.answer("Вы выбрали русский язык.\n"
+                             "Введите запрос в 1-2 слова или нажмите на кнопку, чтобы очистить состояние:",
+                             reply_markup=clear_state_keyboard)
 
 # Message handler for English language
 @router.message(LanguageState.english)
 async def handle_english(message: types.Message, state: FSMContext):
+    wikipedia.set_lang("en")
     query = message.text
     try:
         search_results = wikipedia.search(query)
         if search_results:
             page = wikipedia.page(search_results[0])
             await message.answer(page.summary)
+#            await state.clear()
         else:
-            await message.answer('No information found for this query!')
+            await message.answer('No information found for this query!\n'
+                                 'Ask 1-2 words!')
     except Exception as e:
-        await message.answer('No information found for this query!')
+        await message.answer('No information found for this query!\n'
+                             'Ask 1-2 words!')
 
 # Message handler for Russian language
 @router.message(LanguageState.russian)
@@ -554,12 +485,32 @@ async def handle_russian(message: types.Message, state: FSMContext):
         if search_results:
             page = wikipedia.page(search_results[0])
             await message.answer(page.summary)
+#            await state.clear()
         else:
-            await message.answer('Нет информации по вашему запросу!')
+            await message.answer('Нет информации по вашему запросу!\n'
+                                 'Введите запрос в 1-2 слова!')
     except Exception as e:
-        await message.answer('Нет информации по вашему запросу!')
+        await message.answer('Нет информации по вашему запросу!\n'
+                             'Введите запрос в 1-2 слова!')
 
-# Message handler for other messages
-@router.message(LanguageState.choose_language)
+@router.message(LanguageState.choose_language, F.text == "Stop asking Wiki")
+async def stop_wiki(message: types.Message, state: FSMContext):
+    await state.set_state(LanguageState.stop_wiki)  # Set the new state
+    await message.answer("Are you sure you want to stop using Wikipedia?\n"
+                         "Type /stop_wiki_confirm to confirm or /start to return to the main menu.")
+
+@router.message(LanguageState.stop_wiki, F.text == "/stop_wiki_confirm")
+async def confirm_stop_wiki(message: types.Message, state: FSMContext):
+    await state.clear()  # Clear all states
+    await message.answer("You won't receive Wikipedia updates anymore.\n"
+                         "Returning to the main menu.")
+    await welcome_wiki(message, state)  # Call the function to return to the main menu
+
+@router.message(LanguageState.choose_language, ~F.text.in_(["English", "Russian", "Stop asking Wiki"]))
 async def invalid_language(message: types.Message, state: FSMContext):
-    await message.answer("Please select a language using the provided keyboard.")
+    await message.answer("Please select a language using the provided keyboard or exit the wiki state.")
+
+@router.message(LanguageState.stop_wiki, ~F.text == "/stop_wiki_confirm")
+async def invalid_stop_wiki(message: types.Message, state: FSMContext):
+    await message.answer("Action canceled.")
+    await welcome_wiki(message, state)

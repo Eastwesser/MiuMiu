@@ -1,14 +1,18 @@
 import asyncio
 import logging
 import random
+import copy
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
 from aiogram import Router, types
 from aiogram.enums.dice_emoji import DiceEmoji
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.types import Message
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import CommandStart
+from aiogram.filters.callback_data import CallbackData
+from aiogram.types import (CallbackQuery, InlineKeyboardButton,
+                           InlineKeyboardMarkup, Message)
 
 router = Router(name=__name__)
 
@@ -131,7 +135,7 @@ dealer_hand = []
 
 
 # Handler for the /startblackjack command
-@router.message(Command("startblackjack", prefix="!/"))
+@router.message(Command("start_blackjack", prefix="!/"))
 async def start_blackjack(message: types.Message):
     await message.answer("Hi! Welcome to Blackjack. Send /play21 to start playing.")
 
@@ -217,7 +221,7 @@ def reset_game():
 
 
 # BLOCK ME =============================================================================================================
-@router.message(Command("start_blockme", prefix="!/"))
+@router.message(Command("start_block_me", prefix="!/"))
 async def start_blockme_game(message: types.Message):
     global round_number, health_p1, health_p2
     round_number = 1
@@ -267,3 +271,110 @@ async def process_blockme_attack(callback_query: types.CallbackQuery):
     else:
         # Build the keyboard and send the message for the next round
         await asyncio.sleep(5)
+
+# SEA BATTLE ===========================================================================================================
+# Инициализируем константу размера игрового поля
+FIELD_SIZE = 8
+
+# Создаем словарь соответствий
+LEXICON = {
+    '/start': 'Вот твое поле. Можешь делать ход',
+    '/start_naval': 'Your message for /start_naval command goes here',
+    0: ' ',
+    1: '🌊',
+    2: '💥',
+    'miss': 'Мимо!',
+    'hit': 'Попал!',
+    'used': 'Вы уже стреляли сюда!',
+    'next_move': 'Делайте ваш следующий ход'
+}
+
+# Хардкодим расположение кораблей на игровом поле
+ships: list[list[int]] = [
+    [1, 0, 1, 1, 1, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 1, 0],
+    [1, 0, 0, 0, 1, 0, 0, 0],
+    [0, 0, 0, 0, 1, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 1, 1, 0, 0, 0, 1],
+    [0, 0, 0, 0, 0, 1, 0, 0],
+    [0, 0, 1, 1, 0, 0, 0, 0]
+]
+
+# Инициализируем "базу данных" пользователей
+users: dict[int, dict[str, list]] = {}
+
+
+# Создаем свой класс фабрики коллбэков, указывая префикс
+# и структуру callback_data
+class FieldCallbackFactory(CallbackData, prefix="user_field"):
+    x: int
+    y: int
+
+
+# Функция, которая пересоздает новое поле для каждого игрока
+def reset_field(user_id: int) -> None:
+    users[user_id]['ships'] = copy.deepcopy(ships)
+    users[user_id]['field'] = [
+        [0 for _ in range(FIELD_SIZE)]
+        for _ in range(FIELD_SIZE)
+    ]
+
+
+# Функция, генерирующая клавиатуру в зависимости от данных из
+# матрицы ходов пользователя
+def get_field_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    array_buttons: list[list[InlineKeyboardButton]] = []
+
+    for i in range(FIELD_SIZE):
+        array_buttons.append([])
+        for j in range(FIELD_SIZE):
+            array_buttons[i].append(InlineKeyboardButton(
+                text=LEXICON[users[user_id]['field'][i][j]],
+                callback_data=FieldCallbackFactory(x=i, y=j).pack()
+            ))
+
+    return InlineKeyboardMarkup(inline_keyboard=array_buttons)
+
+
+# Этот хэндлер будет срабатывать на команду /start, записывать
+# пользователя в "базу данных", обнулять игровое поле и отправлять
+# пользователю сообщение с клавиатурой
+@router.message(Command("start_naval", prefix="!/"))
+async def process_start_command(message: Message):
+    if message.from_user.id not in users:
+        users[message.from_user.id] = {}
+    reset_field(message.from_user.id)
+    await message.answer(
+        text=LEXICON['/start_naval'],
+        reply_markup=get_field_keyboard(message.from_user.id)
+    )
+
+
+# Этот хэндлер будет срабатывать на нажатие любой инлайн-кнопки на поле,
+# запускать логику проверки результата нажатия и формирования ответа
+@router.callback_query(FieldCallbackFactory.filter())
+async def process_category_press(callback: CallbackQuery,
+                                 callback_data: FieldCallbackFactory):
+    field = users[callback.from_user.id]['field']
+    ships = users[callback.from_user.id]['ships']
+    if field[callback_data.x][callback_data.y] == 0 and \
+            ships[callback_data.x][callback_data.y] == 0:
+        answer = LEXICON['miss']
+        field[callback_data.x][callback_data.y] = 1
+    elif field[callback_data.x][callback_data.y] == 0 and \
+            ships[callback_data.x][callback_data.y] == 1:
+        answer = LEXICON['hit']
+        field[callback_data.x][callback_data.y] = 2
+    else:
+        answer = LEXICON['used']
+
+    try:
+        await callback.message.edit_text(
+            text=LEXICON['next_move'],
+            reply_markup=get_field_keyboard(callback.from_user.id)
+        )
+    except TelegramBadRequest:
+        pass
+
+    await callback.answer(answer)

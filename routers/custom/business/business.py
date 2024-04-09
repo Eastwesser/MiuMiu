@@ -33,6 +33,8 @@ from typing import Any, Awaitable, Callable, Dict
 from forex_python.converter import CurrencyRates
 from aiogram.types import ContentType
 
+from enum import Enum, auto
+
 
 from pydantic import BaseModel
 from typing import Optional
@@ -44,7 +46,7 @@ forecast_api = os.getenv('WEATHER_API_TOKEN')
 nasa_api = os.getenv('NASA_API_TOKEN')
 openai.api_key = os.getenv('OPEN_AI_TOKEN')
 deep_ai_key = os.getenv('DEEP_AI_TOKEN')
-api_key = nasa_api
+open_exchange = os.getenv('OPEN_EXCHANGE_TOKEN')
 
 bot = Bot(token=bot_token)
 dp = Dispatcher(bot=bot, storage=MemoryStorage())
@@ -88,37 +90,13 @@ class Questioning(StatesGroup):
     Asking = State()
 
 
-class ConversionState(StatesGroup):
-    AWAITING_AMOUNT = State()
-    AWAITING_CURRENCY_PAIR = State()
-
-class CurrencyCallbackFactory(CallbackData, prefix="currency"):
-    currency_from: str
-    currency_to: str
-
-class CurrencyConversionInput(BaseModel):
-    amount: int
-
-class CurrencyPair(BaseModel):
-    currency_from: str
-    currency_to: str
-
-class ConversionStateData(BaseModel):
-    amount: Optional[int] = None
-    currency_pair: Optional[CurrencyPair] = None
-
-class ConversionState(BaseModel):
-    awaiting_amount: Optional[CurrencyConversionInput] = None
-    awaiting_currency_pair: Optional[CurrencyPair] = None
-    data: Optional[ConversionStateData] = None
-
 class LanguageState(StatesGroup):
     choose_language = State()
     question = State()
 
 storage = MemoryStorage()
 
-LANGUAGES = ['ru', 'en', 'de', 'es', 'fr', 'hu']
+# LANGUAGES = ['ru', 'en', 'de', 'es', 'fr', 'hu']
 
 city_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
     [
@@ -221,13 +199,8 @@ async def get_weather(message: types.Message, city: str):
 # NASA - MAGNETIC SOLAR STORMS =========================================================================================
 async def fetch_geomagnetic_storm_data(nasa_api: str) -> List[Dict]:
     """Fetch geomagnetic storm data from NASA API."""
-    # Set the start time to April 8, 2024
-    start_time = datetime(2024, 3, 8).strftime('%Y-%m-%d')
-    # Set the end time to April 9, 2024
-    end_time = datetime(2024, 4, 9).strftime('%Y-%m-%d')
-
     url = "https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/GST"
-    params = {'startDate': start_time, 'endDate': end_time}
+    params = {'mostRecent': 'true'}  # Fetch only the most recent event
     headers = {'Authorization': f'Bearer {nasa_api}'}
 
     try:
@@ -248,13 +221,12 @@ async def format_geomagnetic_storm_data(storm_info: List[Dict]) -> str:
     """Format geomagnetic storm data for display."""
     formatted_message = "Магнитные бури:\n\n"
 
-    # Sort the storm information based on start time in descending order
-    sorted_storms = sorted(storm_info, key=lambda x: x.get('startTime'), reverse=True)
+    if storm_info:
+        # Sort the storm information based on start time in descending order
+        sorted_storms = sorted(storm_info, key=lambda x: x.get('startTime'), reverse=True)
+        # Select the most recent storm
+        recent_storm = sorted_storms[0]
 
-    # Select the most recent storm
-    recent_storm = sorted_storms[0] if sorted_storms else None
-
-    if recent_storm:
         gst_id = recent_storm.get('gstID')
         start_time = recent_storm.get('startTime')
         kp_index_data = recent_storm.get('allKpIndex', [{'kpIndex': 'N/A', 'source': 'N/A'}])[0]
@@ -271,7 +243,7 @@ async def format_geomagnetic_storm_data(storm_info: List[Dict]) -> str:
         )
         formatted_message += formatted_storm
     else:
-        formatted_message += "Увы, нет данных о магнитных бурях в настоящее время."
+        formatted_message += "Увы, нет данных о магнитных бурях."
 
     return formatted_message
 
@@ -287,11 +259,8 @@ async def send_long_message(message: types.Message, text: str):
 
 async def get_magnetic_storm_data(message: types.Message, nasa_api: str):
     geomagnetic_storm_info = await fetch_geomagnetic_storm_data(nasa_api)
-    if geomagnetic_storm_info:
-        formatted_storm_message = await format_geomagnetic_storm_data(geomagnetic_storm_info)
-        await send_long_message(message, formatted_storm_message)
-    else:
-        await send_long_message(message, "Нет данных о магнитных бурях в настоящее время.")
+    formatted_storm_message = await format_geomagnetic_storm_data(geomagnetic_storm_info)
+    await send_long_message(message, formatted_storm_message)
 
 @router.message(Command("magnetic_storm", prefix="!/"))
 async def get_magnetic_storm_command(message: types.Message):
@@ -299,88 +268,122 @@ async def get_magnetic_storm_command(message: types.Message):
     await get_magnetic_storm_data(message, nasa_api)
 
 # OPEN AI ChatGPT 3.5 ==================================================================================================
-async def ask_chatgpt(question):
-    response = openai.Completion.create(
-        engine="text-davinci-002",  # current version, change if needed
-        prompt=question,
-        max_tokens=1500
-    )
-    return response.choices[0].text.strip()
-
-
-# Modify your existing function to handle asking questions
-@router.message(Command("ask_question", prefix="/!%"))
-async def start_questioning(message: types.Message, state: FSMContext):
-    await state.set_state(Questioning.Asking)
-    await message.answer(
-        "Привет! Задайте ваш вопрос.",
-        reply_markup=types.ReplyKeyboardRemove(),
-    )
-
-@router.message()
-async def answer_question(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state == Questioning.Asking:
-        # Get the user's question
-        question = message.text
-        # Call ChatGPT to answer the question
-        response = await ask_chatgpt(question)
-        await message.answer(response)
-        # Finish the conversation
-        await state.clear()
+# async def ask_chatgpt(question):
+#     response = openai.Completion.create(
+#         engine="text-davinci-002",  # current version, change if needed
+#         prompt=question,
+#         max_tokens=1500
+#     )
+#     return response.choices[0].text.strip()
+#
+#
+# # Modify your existing function to handle asking questions
+# @router.message(Command("ask_question", prefix="/!%"))
+# async def start_questioning(message: types.Message, state: FSMContext):
+#     await state.set_state(Questioning.Asking)
+#     await message.answer(
+#         "Привет! Задайте ваш вопрос.",
+#         reply_markup=types.ReplyKeyboardRemove(),
+#     )
+#
+# @router.message()
+# async def answer_question(message: types.Message, state: FSMContext):
+#     current_state = await state.get_state()
+#     if current_state == Questioning.Asking:
+#         # Get the user's question
+#         question = message.text
+#         # Call ChatGPT to answer the question
+#         response = await ask_chatgpt(question)
+#         await message.answer(response)
+#         # Finish the conversation
+#         await state.clear()
 
 # CURRENCY CONVERTER ===================================================================================================
-# Command to start currency conversion
-# @router.message(Command("convert"))
-# async def start_conversion(message: Message, state: FSMContext):
-#     await message.answer("Please enter the amount")
-#     await state.set_state(ConversionState.AWAITING_AMOUNT)
-#
-# # Handler for receiving the amount
-# @router.message(state=ConversionState.AWAITING_AMOUNT)
-# async def process_amount(message: Message, state: FSMContext):
-#     try:
-#         amount = float(message.text.strip())
-#     except ValueError:
-#         await message.answer('Please enter a valid number')
-#         return
-#
-#     if amount <= 0:
-#         await message.answer('Please enter a number greater than 0')
-#         return
-#
-#     keyboard_markup = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-#         [KeyboardButton(text='USD/EUR'), KeyboardButton(text='EUR/USD')],
-#         [KeyboardButton(text='USD/GBP'), KeyboardButton(text='Other')]
-#     ])
-#
-#     await message.answer('Please select the currency pair', reply_markup=keyboard_markup)
-#     await state.update_data(amount=amount)
-#     await state.set_state(ConversionState.AWAITING_CURRENCY_PAIR)
-#
-# # Handler for processing currency pair selection
-# @router.message(state=ConversionState.AWAITING_CURRENCY_PAIR)
-# async def process_currency_pair(message: Message, state: FSMContext):
-#     currency_pairs = {
-#         'USD/EUR': ('USD', 'EUR'),
-#         'EUR/USD': ('EUR', 'USD'),
-#         'USD/GBP': ('USD', 'GBP')
-#     }
-#
-#     selected_currency_pair = message.text.upper()
-#
-#     if selected_currency_pair in currency_pairs:
-#         amount_data = await state.get_data()
-#         amount = amount_data.get('amount')
-#         currency_from, currency_to = currency_pairs[selected_currency_pair]
-#         result = currency_converter.convert(currency_from, currency_to, amount)
-#         await message.answer(f'Result: {round(result, 2)}. You can enter the amount again!')
-#         await state.clear()
-#     else:
-#         await message.answer('Invalid currency pair. Please select from the options provided.')
-#
-# # Run the bot
-#         await state.set_state(ConversionState.AWAITING_AMOUNT)
+# Define conversation states
+class ConversionStates(StatesGroup):
+    AWAITING_AMOUNT = State()
+    AWAITING_CURRENCY_PAIR = State()
+
+
+# Define command handler to start the conversion
+@router.message(Command("convert_money", prefix="/"))
+async def start_conversion(message: Message, state: FSMContext):
+    await message.answer("Welcome to the Currency Converter Bot!\n"
+                         "Please enter the amount to convert:")
+    await state.set_state(ConversionStates.AWAITING_AMOUNT)
+
+
+# Define state handler for awaiting amount
+@router.message(StateFilter(ConversionStates.AWAITING_AMOUNT))
+async def process_amount(message: Message, state: FSMContext):
+    try:
+        amount = float(message.text.strip())
+    except ValueError:
+        await message.answer('Please enter a valid number')
+        return
+
+    if amount <= 0:
+        await message.answer('Please enter a number greater than 0')
+        return
+
+    # Prompt user to select a currency pair
+    keyboard_markup = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
+        [KeyboardButton(text='USD/EUR'), KeyboardButton(text='EUR/USD')],
+        [KeyboardButton(text='USD/GBP'), KeyboardButton(text='Other')]
+    ])
+    await message.answer('Please select the currency pair', reply_markup=keyboard_markup)
+
+    # Update state with amount
+    await state.update_data(amount=amount)
+    await state.set_state(ConversionStates.AWAITING_CURRENCY_PAIR)
+
+
+# Define state handler for awaiting a currency pair
+@router.message(StateFilter(ConversionStates.AWAITING_CURRENCY_PAIR))
+async def process_currency_pair(message: types.Message, state: FSMContext):
+    currency_pairs = {
+        'USD/EUR': ('USD', 'EUR'),
+        'EUR/USD': ('EUR', 'USD'),
+        'USD/GBP': ('USD', 'GBP')
+    }
+
+    selected_currency_pair = message.text.upper()
+
+    if selected_currency_pair in currency_pairs:
+        amount_data = await state.get_data()
+        amount = amount_data.get('amount')
+        currency_from, currency_to = currency_pairs[selected_currency_pair]
+
+        # Fetch exchange rates from the API
+        exchange_rates = await fetch_exchange_rates()
+        if exchange_rates:
+            conversion_rate = exchange_rates.get(currency_to) / exchange_rates.get(currency_from)
+            result = amount * conversion_rate
+            await message.answer(f'Result: {round(result, 2)}. You can enter the amount again!'
+                                 f'Press /convert_money here :3')
+            await state.clear()  # Finish the conversation
+        else:
+            await message.answer('Failed to fetch exchange rates. Please try again later.')
+    else:
+        await message.answer('Invalid currency pair. Please select from the options provided.')
+
+
+async def fetch_exchange_rates():
+    base_url = "https://openexchangerates.org/api/"
+    endpoint = "latest.json"
+    url = f"{base_url}{endpoint}?app_id={open_exchange}"  # Replace with your actual API key
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                return data['rates']
+            else:
+                return None
+    except httpx.HTTPError as exc:
+        print(f"HTTP error occurred: {exc}")
+        return None
 
 # ======================================================================================================================
 # Initialize Wikipedia API

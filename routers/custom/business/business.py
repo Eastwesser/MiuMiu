@@ -319,32 +319,6 @@ async def get_magnetic_storm_data(message: types.Message):
 #         # Finish the conversation
 #         await state.clear()
 
-# DeepL AI =============================================================================================================
-# logging.basicConfig(level=logging.DEBUG)
-#
-# async def ask_gpt_deep_ai(question):
-#     try:
-#         response = requests.post(
-#                 "https://api.deepai.org/api/text-generator",
-#                 files={'text': question},
-#                 headers={'api-key': deep_ai_key}
-#             )
-#
-#
-#         response.raise_for_status()  # Raise an exception for HTTP errors
-#         response_json = response.json()
-#         output = response_json.get("output")
-#         if output is None:
-#             logging.error("DeepAI API response did not contain 'output' field")
-#             return "Sorry, I couldn't generate a response at the moment."
-#         return output
-#     except requests.exceptions.HTTPError as e:
-#         logging.error(f"DeepAI API returned HTTP error: {e.response.status_code}")
-#         return "Sorry, an error occurred while processing your request."
-#     except Exception as e:
-#         logging.exception("An error occurred while calling the DeepAI API")
-#         return "Sorry, an error occurred while processing your request."
-#
 # CURRENCY CONVERTER ===================================================================================================
 # Command to start currency conversion
 # @router.message(Command("convert"))
@@ -423,14 +397,7 @@ language_keyboard = ReplyKeyboardMarkup(
         ],
 ])
 
-clear_state_keyboard = ReplyKeyboardMarkup(
-    resize_keyboard=True,
-    keyboard=[
-        [
-            KeyboardButton(text="Stop asking Wiki"),
-        ],
-    ],
-)
+
 
 # Command handler for /wiki command
 @router.message(Command("wiki", prefix="/!%"))
@@ -449,13 +416,13 @@ async def select_language(message: types.Message, state: FSMContext):
     if language == "english":
         await state.set_state(LanguageState.english)
         await message.answer("You selected English language.\n"
-                             "Ask 1-2 words or press 'Back' to clear the state:",
-                             reply_markup=clear_state_keyboard)
+                             "Ask 1-2 words, I can handle simple terms ^w^",
+                             )
     elif language == "russian":
         await state.set_state(LanguageState.russian)
         await message.answer("Вы выбрали русский язык.\n"
-                             "Введите запрос в 1-2 слова или нажмите на кнопку, чтобы очистить состояние:",
-                             reply_markup=clear_state_keyboard)
+                             "Введите запрос в 1-2 слова, я лучше понимаю простые термины ^w^",
+                             )
 
 # Message handler for English language
 @router.message(LanguageState.english)
@@ -467,13 +434,14 @@ async def handle_english(message: types.Message, state: FSMContext):
         if search_results:
             page = wikipedia.page(search_results[0])
             await message.answer(page.summary)
-#            await state.clear()
+            await state.clear()
+            await message.answer('Exiting wiki mode, press /wiki for more queries.')
         else:
             await message.answer('No information found for this query!\n'
-                                 'Ask 1-2 words!')
+                                 'Ask 1-2 words! Try asking simple terms UnU')
     except Exception as e:
         await message.answer('No information found for this query!\n'
-                             'Ask 1-2 words!')
+                             'Ask 1-2 words! Try asking simple terms UnU')
 
 # Message handler for Russian language
 @router.message(LanguageState.russian)
@@ -485,32 +453,11 @@ async def handle_russian(message: types.Message, state: FSMContext):
         if search_results:
             page = wikipedia.page(search_results[0])
             await message.answer(page.summary)
-#            await state.clear()
+            await state.clear()
+            await message.answer('Выхожу из режима Википедии, напиши /wiki для новых запросов :з')
         else:
             await message.answer('Нет информации по вашему запросу!\n'
-                                 'Введите запрос в 1-2 слова!')
+                                 'Введите запрос в 1-2 слова! Попробуйте использовать простые термины UnU')
     except Exception as e:
         await message.answer('Нет информации по вашему запросу!\n'
-                             'Введите запрос в 1-2 слова!')
-
-@router.message(LanguageState.choose_language, F.text == "Stop asking Wiki")
-async def stop_wiki(message: types.Message, state: FSMContext):
-    await state.set_state(LanguageState.stop_wiki)  # Set the new state
-    await message.answer("Are you sure you want to stop using Wikipedia?\n"
-                         "Type /stop_wiki_confirm to confirm or /start to return to the main menu.")
-
-@router.message(LanguageState.stop_wiki, F.text == "/stop_wiki_confirm")
-async def confirm_stop_wiki(message: types.Message, state: FSMContext):
-    await state.clear()  # Clear all states
-    await message.answer("You won't receive Wikipedia updates anymore.\n"
-                         "Returning to the main menu.")
-    await welcome_wiki(message, state)  # Call the function to return to the main menu
-
-@router.message(LanguageState.choose_language, ~F.text.in_(["English", "Russian", "Stop asking Wiki"]))
-async def invalid_language(message: types.Message, state: FSMContext):
-    await message.answer("Please select a language using the provided keyboard or exit the wiki state.")
-
-@router.message(LanguageState.stop_wiki, ~F.text == "/stop_wiki_confirm")
-async def invalid_stop_wiki(message: types.Message, state: FSMContext):
-    await message.answer("Action canceled.")
-    await welcome_wiki(message, state)
+                             'Введите запрос в 1-2 слова! Попробуйте использовать простые термины UnU')

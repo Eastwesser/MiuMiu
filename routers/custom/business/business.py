@@ -2,7 +2,11 @@ import datetime
 import json
 import os
 import re
+import httpx
+import asyncio
+import aiohttp
 from datetime import datetime, timedelta
+from typing import List, Dict
 
 from aiogram.enums import ParseMode
 from langdetect import detect
@@ -40,6 +44,7 @@ forecast_api = os.getenv('WEATHER_API_TOKEN')
 nasa_api = os.getenv('NASA_API_TOKEN')
 openai.api_key = os.getenv('OPEN_AI_TOKEN')
 deep_ai_key = os.getenv('DEEP_AI_TOKEN')
+api_key = nasa_api
 
 bot = Bot(token=bot_token)
 dp = Dispatcher(bot=bot, storage=MemoryStorage())
@@ -214,29 +219,32 @@ async def get_weather(message: types.Message, city: str):
 
 
 # NASA - MAGNETIC SOLAR STORMS =========================================================================================
-@router.message(Command("magnetic_storm", prefix="!/"))
-async def get_magnetic_storm_command(message: types.Message):
-    await get_magnetic_storm_data(message)
-
-
-async def fetch_geomagnetic_storm_data(api_key: str):
+async def fetch_geomagnetic_storm_data(nasa_api: str) -> List[Dict]:
     """Fetch geomagnetic storm data from NASA API."""
-    url = "https://api.nasa.gov/DONKI/GST"
-    params = {'api_key': api_key}
+    # Set the start time to April 8, 2024
+    start_time = datetime(2024, 3, 8).strftime('%Y-%m-%d')
+    # Set the end time to April 9, 2024
+    end_time = datetime(2024, 4, 9).strftime('%Y-%m-%d')
+
+    url = "https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/GST"
+    params = {'startDate': start_time, 'endDate': end_time}
+    headers = {'Authorization': f'Bearer {nasa_api}'}
+
     try:
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            return data
-        else:
-            print("Error: HTTP status code", response.status_code)
-            return None
-    except requests.RequestException as e:
-        print("Error fetching data:", e)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                return data
+            else:
+                print("Error: HTTP status code", response.status_code)
+                print("Requested URL:", response.url)  # Print the full URL for inspection
+                return None
+    except httpx.HTTPError as e:
+        print("HTTP error fetching data:", e)
         return None
 
-
-async def format_geomagnetic_storm_data(storm_info: list[dict]) -> str:
+async def format_geomagnetic_storm_data(storm_info: List[Dict]) -> str:
     """Format geomagnetic storm data for display."""
     formatted_message = "Магнитные бури:\n\n"
 
@@ -263,10 +271,9 @@ async def format_geomagnetic_storm_data(storm_info: list[dict]) -> str:
         )
         formatted_message += formatted_storm
     else:
-        formatted_message += "Нет данных о магнитных бурях в настоящее время."
+        formatted_message += "Увы, нет данных о магнитных бурях в настоящее время."
 
     return formatted_message
-
 
 async def send_long_message(message: types.Message, text: str):
     """Send a long message by splitting it into parts."""
@@ -278,8 +285,7 @@ async def send_long_message(message: types.Message, text: str):
         for part in parts:
             await message.reply(part)
 
-
-async def get_magnetic_storm_data(message: types.Message):
+async def get_magnetic_storm_data(message: types.Message, nasa_api: str):
     geomagnetic_storm_info = await fetch_geomagnetic_storm_data(nasa_api)
     if geomagnetic_storm_info:
         formatted_storm_message = await format_geomagnetic_storm_data(geomagnetic_storm_info)
@@ -287,37 +293,41 @@ async def get_magnetic_storm_data(message: types.Message):
     else:
         await send_long_message(message, "Нет данных о магнитных бурях в настоящее время.")
 
+@router.message(Command("magnetic_storm", prefix="!/"))
+async def get_magnetic_storm_command(message: types.Message):
+    # Pass the nasa_api token here
+    await get_magnetic_storm_data(message, nasa_api)
 
-# OPEN AI ChatGPT 3.5 (UNCOMMENT IF NEEDED) =============================================================================
-# async def ask_chatgpt(question):
-#     response = openai.Completion.create(
-#         engine="text-davinci-002",  # current version, change if needed
-#         prompt=question,
-#         max_tokens=1500
-#     )
-#     return response.choices[0].text.strip()
-#
-#
-# # Modify your existing function to handle asking questions
-# @router.message(Command("ask_question", prefix="/!%"))
-# async def start_questioning(message: types.Message, state: FSMContext):
-#     await state.set_state(Questioning.Asking)
-#     await message.answer(
-#         "Привет! Задайте ваш вопрос.",
-#         reply_markup=types.ReplyKeyboardRemove(),
-#     )
-#
-# @router.message()
-# async def answer_question(message: types.Message, state: FSMContext):
-#     current_state = await state.get_state()
-#     if current_state == Questioning.Asking:
-#         # Get the user's question
-#         question = message.text
-#         # Call ChatGPT to answer the question
-#         response = await ask_chatgpt(question)
-#         await message.answer(response)
-#         # Finish the conversation
-#         await state.clear()
+# OPEN AI ChatGPT 3.5 ==================================================================================================
+async def ask_chatgpt(question):
+    response = openai.Completion.create(
+        engine="text-davinci-002",  # current version, change if needed
+        prompt=question,
+        max_tokens=1500
+    )
+    return response.choices[0].text.strip()
+
+
+# Modify your existing function to handle asking questions
+@router.message(Command("ask_question", prefix="/!%"))
+async def start_questioning(message: types.Message, state: FSMContext):
+    await state.set_state(Questioning.Asking)
+    await message.answer(
+        "Привет! Задайте ваш вопрос.",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+
+@router.message()
+async def answer_question(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state == Questioning.Asking:
+        # Get the user's question
+        question = message.text
+        # Call ChatGPT to answer the question
+        response = await ask_chatgpt(question)
+        await message.answer(response)
+        # Finish the conversation
+        await state.clear()
 
 # CURRENCY CONVERTER ===================================================================================================
 # Command to start currency conversion

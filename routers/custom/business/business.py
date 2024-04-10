@@ -19,7 +19,7 @@ from aiogram import Router
 from aiogram import types, Dispatcher
 from aiogram import BaseMiddleware
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import TelegramObject
+from aiogram.types import TelegramObject, KeyboardButton
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -28,6 +28,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup, CallbackQuery
 from currency_converter import CurrencyConverter
 from dotenv import load_dotenv
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from enum import Enum, auto
 from typing import Any, Awaitable, Callable, Dict
 from forex_python.converter import CurrencyRates
@@ -299,7 +300,6 @@ async def get_magnetic_storm_command(message: types.Message):
 #         await state.clear()
 
 # CURRENCY CONVERTER ===================================================================================================
-# Define conversation states
 class ConversionStates(StatesGroup):
     AWAITING_AMOUNT = State()
     AWAITING_CURRENCY_PAIR = State()
@@ -327,10 +327,15 @@ async def process_amount(message: Message, state: FSMContext):
         return
 
     # Prompt user to select a currency pair
-    keyboard_markup = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-        [KeyboardButton(text='USD/EUR'), KeyboardButton(text='EUR/USD')],
-        [KeyboardButton(text='USD/GBP'), KeyboardButton(text='Other')]
-    ])
+    keyboard_markup = ReplyKeyboardMarkup(
+        resize_keyboard=True, keyboard=[
+            [KeyboardButton(text='USD/EUR'), KeyboardButton(text='EUR/USD'), KeyboardButton(text='USD/GBP')],
+            [KeyboardButton(text='USD/RUB'), KeyboardButton(text='EUR/RUB'), KeyboardButton(text='HUF/RUB')],
+            [KeyboardButton(text='RSD/RUB'), KeyboardButton(text='AMD/RUB'), KeyboardButton(text='CNY/RUB')],
+            [KeyboardButton(text='JPY/RUB'), KeyboardButton(text='RUB/USD'), KeyboardButton(text='RUB/EUR')],
+            [KeyboardButton(text='RUB/HUF'), KeyboardButton(text='RUB/RSD'), KeyboardButton(text='RUB/AMD')],
+            [KeyboardButton(text='RUB/CNY'), KeyboardButton(text='RUB/JPY'), KeyboardButton(text='/convert_money')]
+        ])
     await message.answer('Please select the currency pair', reply_markup=keyboard_markup)
 
     # Update state with amount
@@ -344,7 +349,21 @@ async def process_currency_pair(message: types.Message, state: FSMContext):
     currency_pairs = {
         'USD/EUR': ('USD', 'EUR'),
         'EUR/USD': ('EUR', 'USD'),
-        'USD/GBP': ('USD', 'GBP')
+        'USD/GBP': ('USD', 'GBP'),
+        'USD/RUB': ('USD', 'RUB'),
+        'EUR/RUB': ('EUR', 'RUB'),
+        'HUF/RUB': ('HUF', 'RUB'),
+        'RSD/RUB': ('RSD', 'RUB'),
+        'AMD/RUB': ('AMD', 'RUB'),
+        'CNY/RUB': ('CNY', 'RUB'),
+        'JPY/RUB': ('JPY', 'RUB'),
+        'RUB/USD': ('RUB', 'USD'),
+        'RUB/EUR': ('RUB', 'EUR'),
+        'RUB/HUF': ('RUB', 'HUF'),
+        'RUB/RSD': ('RUB', 'RSD'),
+        'RUB/AMD': ('RUB', 'AMD'),
+        'RUB/CNY': ('RUB', 'CNY'),
+        'RUB/JPY': ('RUB', 'JPY'),
     }
 
     selected_currency_pair = message.text.upper()
@@ -359,7 +378,7 @@ async def process_currency_pair(message: types.Message, state: FSMContext):
         if exchange_rates:
             conversion_rate = exchange_rates.get(currency_to) / exchange_rates.get(currency_from)
             result = amount * conversion_rate
-            await message.answer(f'Result: {round(result, 2)}. You can enter the amount again!'
+            await message.answer(f'Result: {round(result, 2)}. You can enter the amount again!\n'
                                  f'Press /convert_money here :3')
             await state.clear()  # Finish the conversation
         else:
@@ -384,8 +403,8 @@ async def fetch_exchange_rates():
     except httpx.HTTPError as exc:
         print(f"HTTP error occurred: {exc}")
         return None
-
-# ======================================================================================================================
+# ===========================
+# ===========================================================================================
 # Initialize Wikipedia API
 class LanguageState(StatesGroup):
     choose_language = State()  # State for choosing language

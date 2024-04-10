@@ -269,35 +269,37 @@ async def get_magnetic_storm_command(message: types.Message):
     await get_magnetic_storm_data(message, nasa_api)
 
 # OPEN AI ChatGPT 3.5 ==================================================================================================
-# async def ask_chatgpt(question):
-#     response = openai.Completion.create(
-#         engine="text-davinci-002",  # current version, change if needed
-#         prompt=question,
-#         max_tokens=1500
-#     )
-#     return response.choices[0].text.strip()
-#
-#
-# # Modify your existing function to handle asking questions
-# @router.message(Command("ask_question", prefix="/!%"))
-# async def start_questioning(message: types.Message, state: FSMContext):
-#     await state.set_state(Questioning.Asking)
-#     await message.answer(
-#         "Привет! Задайте ваш вопрос.",
-#         reply_markup=types.ReplyKeyboardRemove(),
-#     )
-#
-# @router.message()
-# async def answer_question(message: types.Message, state: FSMContext):
-#     current_state = await state.get_state()
-#     if current_state == Questioning.Asking:
-#         # Get the user's question
-#         question = message.text
-#         # Call ChatGPT to answer the question
-#         response = await ask_chatgpt(question)
-#         await message.answer(response)
-#         # Finish the conversation
-#         await state.clear()
+async def ask_chatgpt(question):
+    response = openai.Completion.create(
+        engine="text-davinci-002",  # current version, change if needed
+        prompt=question,
+        max_tokens=1500
+    )
+    return response.choices[0].text.strip()
+
+
+# Modify your existing function to handle asking questions
+@router.message(Command("ask_question", prefix="/!%"))
+async def start_questioning(message: types.Message, state: FSMContext):
+    await state.set_state(Questioning.Asking)
+    await message.answer(
+        "Привет! Задайте ваш вопрос :3",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+
+@router.message(Questioning.Asking)
+async def answer_question(message: types.Message, state: FSMContext):
+    # Get the user's question
+    question = message.text
+
+    # Call ChatGPT to answer the question
+    response = await ask_chatgpt(question)
+    await message.answer(response)
+    await message.answer(
+        "Нажмите снова /ask_question, чтобы задать ещё вопросы :3",
+    )
+    # Finish the conversation
+    await state.clear()
 
 # CURRENCY CONVERTER ===================================================================================================
 class ConversionStates(StatesGroup):
@@ -403,9 +405,8 @@ async def fetch_exchange_rates():
     except httpx.HTTPError as exc:
         print(f"HTTP error occurred: {exc}")
         return None
-# ===========================
-# ===========================================================================================
-# Initialize Wikipedia API
+
+# Initialize Wikipedia API==============================================================================================
 class LanguageState(StatesGroup):
     choose_language = State()  # State for choosing language
     english = State()  # State for English language

@@ -1,15 +1,11 @@
 import datetime
 import json
 import os
-import re
-import httpx
-import asyncio
-import aiohttp
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import Dict
+from typing import List
 
-from aiogram.enums import ParseMode
-from langdetect import detect
+import httpx
 import openai
 import pytz
 import requests
@@ -17,28 +13,14 @@ import wikipedia
 from aiogram import Bot, F
 from aiogram import Router
 from aiogram import types, Dispatcher
-from aiogram import BaseMiddleware
-from aiogram.filters.callback_data import CallbackData
-from aiogram.types import TelegramObject, KeyboardButton
 from aiogram.filters import Command, StateFilter
+from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup, CallbackQuery
-from currency_converter import CurrencyConverter
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 from dotenv import load_dotenv
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
-from enum import Enum, auto
-from typing import Any, Awaitable, Callable, Dict
 from forex_python.converter import CurrencyRates
-from aiogram.types import ContentType
-
-from enum import Enum, auto
-
-
-from pydantic import BaseModel
-from typing import Optional
 
 load_dotenv()
 
@@ -90,10 +72,6 @@ class WeatherQuery(StatesGroup):
 class Questioning(StatesGroup):
     Asking = State()
 
-
-class LanguageState(StatesGroup):
-    choose_language = State()
-    question = State()
 
 storage = MemoryStorage()
 
@@ -218,6 +196,7 @@ async def fetch_geomagnetic_storm_data(nasa_api: str) -> List[Dict]:
         print("HTTP error fetching data:", e)
         return None
 
+
 async def format_geomagnetic_storm_data(storm_info: List[Dict]) -> str:
     """Format geomagnetic storm data for display."""
     formatted_message = "Магнитные бури:\n\n"
@@ -248,6 +227,7 @@ async def format_geomagnetic_storm_data(storm_info: List[Dict]) -> str:
 
     return formatted_message
 
+
 async def send_long_message(message: types.Message, text: str):
     """Send a long message by splitting it into parts."""
     max_length = 4096
@@ -258,48 +238,49 @@ async def send_long_message(message: types.Message, text: str):
         for part in parts:
             await message.reply(part)
 
+
 async def get_magnetic_storm_data(message: types.Message, nasa_api: str):
     geomagnetic_storm_info = await fetch_geomagnetic_storm_data(nasa_api)
     formatted_storm_message = await format_geomagnetic_storm_data(geomagnetic_storm_info)
     await send_long_message(message, formatted_storm_message)
+
 
 @router.message(Command("magnetic_storm", prefix="!/"))
 async def get_magnetic_storm_command(message: types.Message):
     # Pass the nasa_api token here
     await get_magnetic_storm_data(message, nasa_api)
 
+
 # OPEN AI ChatGPT 3.5 ==================================================================================================
 async def ask_chatgpt(question):
-    response = openai.Completion.create(
-        engine="text-davinci-002",  # current version, change if needed
-        prompt=question,
-        max_tokens=1500
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-instruct",
+        messages=[
+            {"role": "user", "content": question}
+        ]
     )
-    return response.choices[0].text.strip()
+    return response.choices[0].message.content
 
 
-# Modify your existing function to handle asking questions
-@router.message(Command("ask_question", prefix="/!%"))
-async def start_questioning(message: types.Message, state: FSMContext):
+@router.message(Command("ask_question_gpt", prefix="/!%"))
+async def start_questioning(message: Message, state: FSMContext):
     await state.set_state(Questioning.Asking)
     await message.answer(
         "Привет! Задайте ваш вопрос :3",
         reply_markup=types.ReplyKeyboardRemove(),
     )
 
-@router.message(Questioning.Asking)
-async def answer_question(message: types.Message, state: FSMContext):
-    # Get the user's question
-    question = message.text
 
-    # Call ChatGPT to answer the question
+@router.message(Questioning.Asking)
+async def answer_question(message: Message, state: FSMContext):
+    question = message.text
     response = await ask_chatgpt(question)
     await message.answer(response)
     await message.answer(
         "Нажмите снова /ask_question, чтобы задать ещё вопросы :3",
     )
-    # Finish the conversation
     await state.clear()
+
 
 # CURRENCY CONVERTER ===================================================================================================
 class ConversionStates(StatesGroup):
@@ -406,6 +387,7 @@ async def fetch_exchange_rates():
         print(f"HTTP error occurred: {exc}")
         return None
 
+
 # Initialize Wikipedia API==============================================================================================
 class LanguageState(StatesGroup):
     choose_language = State()  # State for choosing language
@@ -413,12 +395,15 @@ class LanguageState(StatesGroup):
     russian = State()  # State for Russian language
     stop_wiki = State()  # State for stopping Wikipedia
 
+
 # Define a new callback data factory for the "clear_wiki_state" button
 class ClearWikiCallbackFactory(CallbackData, prefix="clear_wiki"):
     pass
 
+
 class BackCallbackFactory(CallbackData, prefix="back"):
     pass
+
 
 # Keyboard for language selection
 language_keyboard = ReplyKeyboardMarkup(
@@ -428,8 +413,7 @@ language_keyboard = ReplyKeyboardMarkup(
             KeyboardButton(text="English"),
             KeyboardButton(text="Russian"),
         ],
-])
-
+    ])
 
 
 # Command handler for /wiki command
@@ -441,6 +425,7 @@ async def welcome_wiki(message: types.Message, state: FSMContext):
         "Please select your language. ^w^",
         reply_markup=language_keyboard
     )
+
 
 @router.message(LanguageState.choose_language, F.text.in_(["English", "Russian"]))
 async def select_language(message: types.Message, state: FSMContext):
@@ -456,6 +441,7 @@ async def select_language(message: types.Message, state: FSMContext):
         await message.answer("Вы выбрали русский язык.\n"
                              "Введите запрос в 1-2 слова, я лучше понимаю простые термины ^w^",
                              )
+
 
 # Message handler for English language
 @router.message(LanguageState.english)
@@ -475,6 +461,7 @@ async def handle_english(message: types.Message, state: FSMContext):
     except Exception as e:
         await message.answer('No information found for this query!\n'
                              'Ask 1-2 words! Try asking simple terms UnU')
+
 
 # Message handler for Russian language
 @router.message(LanguageState.russian)

@@ -10,15 +10,18 @@ import openai
 import pytz
 import requests
 import wikipedia
-from aiogram import Bot, F
-from aiogram import Router
+from aiogram import Bot, Router, F
 from aiogram import types, Dispatcher
 from aiogram.filters import Command, StateFilter
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
+from aiogram.types import (
+    ReplyKeyboardMarkup, KeyboardButton,
+    InlineKeyboardMarkup, InlineKeyboardButton,
+    Message, CallbackQuery
+)
 from dotenv import load_dotenv
 from forex_python.converter import CurrencyRates
 
@@ -30,6 +33,8 @@ nasa_api = os.getenv('NASA_API_TOKEN')
 openai.api_key = os.getenv('OPEN_AI_TOKEN')
 deep_ai_key = os.getenv('DEEP_AI_TOKEN')
 open_exchange = os.getenv('OPEN_EXCHANGE_TOKEN')
+big_poco = os.getenv('YANDEX_ID_ADMIN')
+yandex_api_key = os.getenv('YANDEX_API_KEY')
 
 bot = Bot(token=bot_token)
 dp = Dispatcher(bot=bot, storage=MemoryStorage())
@@ -262,7 +267,7 @@ async def ask_chatgpt(question):
     return response.choices[0].message.content
 
 
-@router.message(Command("ask_question_gpt", prefix="/!%"))
+@router.message(Command("ask_question_chat_gpt", prefix="/!%"))
 async def start_questioning(message: Message, state: FSMContext):
     await state.set_state(Questioning.Asking)
     await message.answer(
@@ -280,6 +285,57 @@ async def answer_question(message: Message, state: FSMContext):
         "Нажмите снова /ask_question, чтобы задать ещё вопросы :3",
     )
     await state.clear()
+
+
+# YandexGPT ============================================================================================================
+prompt_for_yandex = {
+    "modelUri": f"gpt://{big_poco}/yandexgpt-lite",
+    "completionOptions": {
+        "stream": False,
+        "temperature": 0.6,
+        "maxTokens": "2000"
+    },
+
+    "messages": [
+        {
+            "role": "system",
+            "text": "Ты консультант цветочного магазина, эксперт во флористике."
+        },
+        {
+            "role": "user",
+            "text": "Привет, я хочу задать тебе вопрос, касающийся флористики."
+        },
+        {
+            "role": "assistant",
+            "text": "Привет, какой цветок вас интересует?"
+        },
+        {
+            "role": "user",
+            "text": "Меня интересуют Эустомы и Подсолнухи."
+        },
+
+    ]
+}
+
+yandex_url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+headers_yandex_gpt = {
+    "Content-Type": "application/json",
+    "Authorization": f"Api-Key {yandex_api_key}"
+}
+
+response_yandex_gpt = requests.post(yandex_url, headers=headers_yandex_gpt, json=prompt_for_yandex)
+result_yandex_gpt = response_yandex_gpt.text
+print(result_yandex_gpt)
+
+
+@router.message(Command("ask_miumiu_gpt", prefix="/!%"))
+async def start_questioning(message: Message, state: FSMContext):
+    await state.set_state(Questioning.Asking)
+    await message.answer(
+        "Привет! Задайте ваш вопрос :3\n"
+        "You may now ask your question ^w^",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
 
 
 # CURRENCY CONVERTER ===================================================================================================
@@ -481,3 +537,66 @@ async def handle_russian(message: types.Message, state: FSMContext):
     except Exception as e:
         await message.answer('Нет информации по вашему запросу!\n'
                              'Введите запрос в 1-2 слова! Попробуйте использовать простые термины UnU')
+
+
+# Clothes shop sample ==================================================================================================
+class Register(StatesGroup):
+    name = State()
+    age = State()
+    number = State()
+
+
+main_shop_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Каталог')],
+                                             [KeyboardButton(text='Корзина')],
+                                             [KeyboardButton(text='Контакты'),
+                                              KeyboardButton(text='О нас')]],
+                                   resize_keyboard=True,
+                                   input_field_placeholder='Выберите пункт меню...')
+
+catalog_shop_kb = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text='Футболки', callback_data='t-shirt')],
+    [InlineKeyboardButton(text='Кроссовки', callback_data='sneakers')],
+    [InlineKeyboardButton(text='Кепки', callback_data='cap')]])
+
+get_number_shop_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Отправить номер',
+                                                                   request_contact=True)]],
+                                         resize_keyboard=True)
+
+
+@router.message(F.text == 'Каталог')
+async def catalog(message: Message):
+    await message.answer('Выберите категорию товара', reply_markup=catalog_shop_kb)
+
+
+@router.callback_query(F.data == 't-shirt')
+async def t_shirt(callback: CallbackQuery):
+    await callback.answer('Вы выбрали категорию', show_alert=True)
+    await callback.message.answer('Вы выбрали категорию футболок.')
+
+
+@router.message(Command('register'))
+async def register(message: Message, state: FSMContext):
+    await state.set_state(Register.name)
+    await message.answer('Введите ваше имя')
+
+
+@router.message(Register.name)
+async def register_name(message: Message, state: FSMContext):
+    await state.update_data(name=message.text)
+    await state.set_state(Register.age)
+    await message.answer('Введите ваш возраст')
+
+
+@router.message(Register.age)
+async def register_age(message: Message, state: FSMContext):
+    await state.update_data(age=message.text)
+    await state.set_state(Register.number)
+    await message.answer('Отправьте ваш номер телефона', reply_markup=get_number_shop_kb)
+
+
+@router.message(Register.number, F.contact)
+async def register_number(message: Message, state: FSMContext):
+    await state.update_data(number=message.contact.phone_number)
+    data = await state.get_data()
+    await message.answer(f'Ваше имя: {data["name"]}\nВаш возраст: {data["age"]}\nНомер: {data["number"]}')
+    await state.clear()

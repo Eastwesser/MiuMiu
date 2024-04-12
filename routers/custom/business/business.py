@@ -20,7 +20,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
-    InlineKeyboardMarkup, InlineKeyboardButton,
+    InlineKeyboardButton,
     Message, CallbackQuery
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -295,55 +295,67 @@ async def answer_question(message: Message, state: FSMContext):
 
 
 # YandexGPT ============================================================================================================
-# prompt_for_yandex = {
-#     "modelUri": f"gpt://{big_poco}/yandexgpt-lite",
-#     "completionOptions": {
-#         "stream": False,
-#         "temperature": 0.6,
-#         "maxTokens": "2000"
-#     },
-#
-#     "messages": [
-#         {
-#             "role": "system",
-#             "text": "Ты консультант цветочного магазина, эксперт во флористике."
-#         },
-#         {
-#             "role": "user",
-#             "text": "Привет, я хочу задать тебе вопрос, касающийся флористики."
-#         },
-#         {
-#             "role": "assistant",
-#             "text": "Привет, какой цветок вас интересует?"
-#         },
-#         {
-#             "role": "user",
-#             "text": "Меня интересуют Эустомы и Подсолнухи."
-#         },
-#
-#     ]
-# }
-#
-# yandex_url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
-# headers_yandex_gpt = {
-#     "Content-Type": "application/json",
-#     "Authorization": f"Api-Key {yandex_api_key}"
-# }
-#
-# response_yandex_gpt = requests.post(yandex_url, headers=headers_yandex_gpt, json=prompt_for_yandex)
-# result_yandex_gpt = response_yandex_gpt.text
-# print(result_yandex_gpt)
-#
-#
-# @router.message(Command("ask_miumiu_gpt", prefix="/!%"))
-# async def start_questioning(message: Message, state: FSMContext):
-#     await state.set_state(Questioning.Asking)
-#     await message.answer(
-#         "Привет! Задайте ваш вопрос :3\n"
-#         "You may now ask your question ^w^",
-#         reply_markup=types.ReplyKeyboardRemove(),
-#     )
+class Danila(StatesGroup):
+    Yandex_GPT = State()
 
+
+yandex_url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+headers_yandex_gpt = {
+    "Content-Type": "application/json",
+    "Authorization": f"Api-Key {yandex_api_key}"
+}
+
+
+@router.message(Command("ask_miumiu_gpt", prefix="/!%"))
+async def ask_miumiu_gpt(message: Message, state: FSMContext):
+    await message.answer(
+        "Привет! Задайте ваш вопрос :3\n"
+        "You may now ask your question ^w^",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+    await state.set_state(Danila.Yandex_GPT)
+
+
+@router.message(F.text)
+async def handle_user_input(message: Message, state: FSMContext):
+    await message.answer("Подождите пожалуйста, обрабатываю запрос ^w^")
+
+    current_state = await state.get_state()
+
+    print("Current State:", current_state)
+
+    if current_state == Danila.Yandex_GPT:
+        message_for_yandex = {
+            "modelUri": f"gpt://{big_poco}/yandexgpt-lite",
+            "completionOptions": {
+                "stream": False,
+                "temperature": 0.6,
+                "maxTokens": "2000"
+            },
+            "messages": [
+                {
+                    "role": "user",
+                    "text": message.text
+                },
+            ]
+        }
+
+        response_yandex_gpt = requests.post(yandex_url, headers=headers_yandex_gpt, json=message_for_yandex)
+        result_yandex_gpt = response_yandex_gpt.json()
+
+        print("Yandex GPT Response:", result_yandex_gpt)
+
+        try:
+            yandex_response = result_yandex_gpt["result"]["alternatives"][0]["message"]["text"]
+            await message.answer(yandex_response)
+        except KeyError:
+            await message.answer("Error: Unable to fetch response.")
+        finally:
+            await state.clear()
+    else:
+        await message.answer("Please initiate the conversation with /ask_miumiu_gpt first.")
+
+    await message.answer("Если нужно что-то ещё, смело нажимай /ask_miumiu_gpt :3")
 
 # CURRENCY CONVERTER ===================================================================================================
 class ConversionStates(StatesGroup):
@@ -632,6 +644,7 @@ async def categories():
     keyboard.add(InlineKeyboardButton(text='На главную', callback_data='to_main'))
     return keyboard.adjust(2).as_markup()
 
+
 # ======================================================================================================================
 # @router.message(F.text == 'Каталог')
 # async def catalog(message: Message):
@@ -649,6 +662,8 @@ async def items(category_id):
         keyboard.add(InlineKeyboardButton(text=item.name, callback_data=f"item_{item.id}"))
     keyboard.add(InlineKeyboardButton(text='На главную', callback_data='to_main'))
     return keyboard.adjust(2).as_markup()
+
+
 # ======================================================================================================================
 # @router.callback_query(F.data.startswith('category_'))
 # async def category(callback: CallbackQuery):
@@ -674,6 +689,7 @@ async def cmd_reebokk_start(message: Message, state: FSMContext):
         await state.set_state(Clothes_shop.Reebokk)
     except Exception as e:
         logging.error(f"Error handling command /reebokk: {e}")
+
 
 @router.message(F.text == 'Каталог')
 async def catalog(message: Message):

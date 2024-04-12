@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from typing import Dict
@@ -22,8 +23,12 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     Message, CallbackQuery
 )
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 from forex_python.converter import CurrencyRates
+
+from routers.custom.business.database import requests as rq
+from routers.custom.business.database.requests import get_categories, get_category_item
 
 load_dotenv()
 
@@ -44,6 +49,8 @@ currency_converter = CurrencyRates()
 data_amount = 0
 
 router = Router(name=__name__)
+
+logging.basicConfig(level=logging.DEBUG)
 
 # WEATHER CONFIG
 weather_translations = {
@@ -288,54 +295,54 @@ async def answer_question(message: Message, state: FSMContext):
 
 
 # YandexGPT ============================================================================================================
-prompt_for_yandex = {
-    "modelUri": f"gpt://{big_poco}/yandexgpt-lite",
-    "completionOptions": {
-        "stream": False,
-        "temperature": 0.6,
-        "maxTokens": "2000"
-    },
-
-    "messages": [
-        {
-            "role": "system",
-            "text": "Ты консультант цветочного магазина, эксперт во флористике."
-        },
-        {
-            "role": "user",
-            "text": "Привет, я хочу задать тебе вопрос, касающийся флористики."
-        },
-        {
-            "role": "assistant",
-            "text": "Привет, какой цветок вас интересует?"
-        },
-        {
-            "role": "user",
-            "text": "Меня интересуют Эустомы и Подсолнухи."
-        },
-
-    ]
-}
-
-yandex_url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
-headers_yandex_gpt = {
-    "Content-Type": "application/json",
-    "Authorization": f"Api-Key {yandex_api_key}"
-}
-
-response_yandex_gpt = requests.post(yandex_url, headers=headers_yandex_gpt, json=prompt_for_yandex)
-result_yandex_gpt = response_yandex_gpt.text
-print(result_yandex_gpt)
-
-
-@router.message(Command("ask_miumiu_gpt", prefix="/!%"))
-async def start_questioning(message: Message, state: FSMContext):
-    await state.set_state(Questioning.Asking)
-    await message.answer(
-        "Привет! Задайте ваш вопрос :3\n"
-        "You may now ask your question ^w^",
-        reply_markup=types.ReplyKeyboardRemove(),
-    )
+# prompt_for_yandex = {
+#     "modelUri": f"gpt://{big_poco}/yandexgpt-lite",
+#     "completionOptions": {
+#         "stream": False,
+#         "temperature": 0.6,
+#         "maxTokens": "2000"
+#     },
+#
+#     "messages": [
+#         {
+#             "role": "system",
+#             "text": "Ты консультант цветочного магазина, эксперт во флористике."
+#         },
+#         {
+#             "role": "user",
+#             "text": "Привет, я хочу задать тебе вопрос, касающийся флористики."
+#         },
+#         {
+#             "role": "assistant",
+#             "text": "Привет, какой цветок вас интересует?"
+#         },
+#         {
+#             "role": "user",
+#             "text": "Меня интересуют Эустомы и Подсолнухи."
+#         },
+#
+#     ]
+# }
+#
+# yandex_url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+# headers_yandex_gpt = {
+#     "Content-Type": "application/json",
+#     "Authorization": f"Api-Key {yandex_api_key}"
+# }
+#
+# response_yandex_gpt = requests.post(yandex_url, headers=headers_yandex_gpt, json=prompt_for_yandex)
+# result_yandex_gpt = response_yandex_gpt.text
+# print(result_yandex_gpt)
+#
+#
+# @router.message(Command("ask_miumiu_gpt", prefix="/!%"))
+# async def start_questioning(message: Message, state: FSMContext):
+#     await state.set_state(Questioning.Asking)
+#     await message.answer(
+#         "Привет! Задайте ваш вопрос :3\n"
+#         "You may now ask your question ^w^",
+#         reply_markup=types.ReplyKeyboardRemove(),
+#     )
 
 
 # CURRENCY CONVERTER ===================================================================================================
@@ -546,57 +553,158 @@ class Register(StatesGroup):
     number = State()
 
 
-main_shop_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Каталог')],
-                                             [KeyboardButton(text='Корзина')],
-                                             [KeyboardButton(text='Контакты'),
-                                              KeyboardButton(text='О нас')]],
-                                   resize_keyboard=True,
-                                   input_field_placeholder='Выберите пункт меню...')
+# main_shop_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Каталог')],
+#                                              [KeyboardButton(text='Корзина')],
+#                                              [KeyboardButton(text='Контакты'),
+#                                               KeyboardButton(text='О нас')]],
+#                                    resize_keyboard=True,
+#                                    input_field_placeholder='Выберите пункт меню...')
+#
+# catalog_shop_kb = InlineKeyboardMarkup(inline_keyboard=[
+#     [InlineKeyboardButton(text='Футболки', callback_data='t-shirt')],
+#     [InlineKeyboardButton(text='Кроссовки', callback_data='sneakers')],
+#     [InlineKeyboardButton(text='Кепки', callback_data='cap')]])
+#
+# get_number_shop_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Отправить номер',
+#                                                                    request_contact=True)]],
+#                                          resize_keyboard=True)
+#
+#
+# @router.message(F.text == 'Каталог вещей')
+# async def catalog(message: Message):
+#     await message.answer('Выберите категорию товара', reply_markup=catalog_shop_kb)
+#
+#
+# @router.callback_query(F.data == 't-shirt')
+# async def t_shirt(callback: CallbackQuery):
+#     await callback.answer('Вы выбрали категорию', show_alert=True)
+#     await callback.message.answer('Вы выбрали категорию футболок.')
+#
+#
+# @router.message(Command('register'))
+# async def register(message: Message, state: FSMContext):
+#     await state.set_state(Register.name)
+#     await message.answer('Введите ваше имя')
+#
+#
+# @router.message(Register.name)
+# async def register_name(message: Message, state: FSMContext):
+#     await state.update_data(name=message.text)
+#     await state.set_state(Register.age)
+#     await message.answer('Введите ваш возраст')
+#
+#
+# @router.message(Register.age)
+# async def register_age(message: Message, state: FSMContext):
+#     await state.update_data(age=message.text)
+#     await state.set_state(Register.number)
+#     await message.answer('Отправьте ваш номер телефона', reply_markup=get_number_shop_kb)
+#
+#
+# @router.message(Register.number, F.contact)
+# async def register_number(message: Message, state: FSMContext):
+#     await state.update_data(number=message.contact.phone_number)
+#     data = await state.get_data()
+#     await message.answer(f'Ваше имя: {data["name"]}\nВаш возраст: {data["age"]}\nНомер: {data["number"]}')
+#     await state.clear()
 
-catalog_shop_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text='Футболки', callback_data='t-shirt')],
-    [InlineKeyboardButton(text='Кроссовки', callback_data='sneakers')],
-    [InlineKeyboardButton(text='Кепки', callback_data='cap')]])
 
-get_number_shop_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Отправить номер',
-                                                                   request_contact=True)]],
-                                         resize_keyboard=True)
+# Updated shop with SQLite3 ============================================================================================
+class Clothes_shop(StatesGroup):
+    Reebokk = State()
 
+
+main_reebokk = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Каталог')],
+    [KeyboardButton(text='Корзина')],
+    [KeyboardButton(text='Контакты'), KeyboardButton(text='О нас')]
+],
+    resize_keyboard=True,
+    input_field_placeholder='Выберите пункт меню...'
+)
+
+
+async def categories():
+    all_categories = await get_categories()
+    keyboard = InlineKeyboardBuilder()
+    for category in all_categories:
+        keyboard.add(InlineKeyboardButton(text=category.name, callback_data=f"category_{category.id}"))
+    keyboard.add(InlineKeyboardButton(text='На главную', callback_data='to_main'))
+    return keyboard.adjust(2).as_markup()
+
+# ======================================================================================================================
+# @router.message(F.text == 'Каталог')
+# async def catalog(message: Message):
+#     try:
+#         logging.debug("Received text message: 'Каталог'")
+#         await message.answer('Выберите категорию товара', reply_markup=await categories())
+#     except Exception as e:
+#         logging.error(f"Error handling message 'Каталог': {e}")
+# ======================================================================================================================
+
+async def items(category_id):
+    all_items = await get_category_item(category_id)
+    keyboard = InlineKeyboardBuilder()
+    for item in all_items:
+        keyboard.add(InlineKeyboardButton(text=item.name, callback_data=f"item_{item.id}"))
+    keyboard.add(InlineKeyboardButton(text='На главную', callback_data='to_main'))
+    return keyboard.adjust(2).as_markup()
+# ======================================================================================================================
+# @router.callback_query(F.data.startswith('category_'))
+# async def category(callback: CallbackQuery):
+#     try:
+#         logging.debug("Received callback query with category data")
+#         await callback.answer('Вы выбрали категорию')
+#         await callback.message.answer('Выберите товар по категории',
+#                                       reply_markup=await items(callback.data.split('_')[1]))
+#     except Exception as e:
+#         logging.error(f"Error handling callback query with category data: {e}")
+# ======================================================================================================================
+
+# handlers below =======================================================================================================
+@router.message(Command("reebokk", prefix="/!%"))
+async def cmd_reebokk_start(message: Message, state: FSMContext):
+    try:
+        logging.debug("Received command: /reebokk")
+        await rq.set_user(message.from_user.id)
+        await message.answer(
+            'Добро пожаловать в магазин кроссовок!',
+            reply_markup=main_reebokk,
+        )
+        await state.set_state(Clothes_shop.Reebokk)
+    except Exception as e:
+        logging.error(f"Error handling command /reebokk: {e}")
 
 @router.message(F.text == 'Каталог')
 async def catalog(message: Message):
-    await message.answer('Выберите категорию товара', reply_markup=catalog_shop_kb)
+    try:
+        logging.debug("Received text message: 'Каталог'")
+        await message.answer('Выберите категорию товара', reply_markup=await categories())
+    except Exception as e:
+        logging.error(f"Error handling message 'Каталог': {e}")
 
 
-@router.callback_query(F.data == 't-shirt')
-async def t_shirt(callback: CallbackQuery):
-    await callback.answer('Вы выбрали категорию', show_alert=True)
-    await callback.message.answer('Вы выбрали категорию футболок.')
+@router.callback_query(F.data.startswith('category_'))
+async def category(callback: CallbackQuery):
+    try:
+        logging.debug("Received callback query with category data")
+        await callback.answer('Вы выбрали категорию')
+        await callback.message.answer('Выберите товар по категории',
+                                      reply_markup=await items(callback.data.split('_')[1]))
+    except Exception as e:
+        logging.error(f"Error handling callback query with category data: {e}")
 
 
-@router.message(Command('register'))
-async def register(message: Message, state: FSMContext):
-    await state.set_state(Register.name)
-    await message.answer('Введите ваше имя')
-
-
-@router.message(Register.name)
-async def register_name(message: Message, state: FSMContext):
-    await state.update_data(name=message.text)
-    await state.set_state(Register.age)
-    await message.answer('Введите ваш возраст')
-
-
-@router.message(Register.age)
-async def register_age(message: Message, state: FSMContext):
-    await state.update_data(age=message.text)
-    await state.set_state(Register.number)
-    await message.answer('Отправьте ваш номер телефона', reply_markup=get_number_shop_kb)
-
-
-@router.message(Register.number, F.contact)
-async def register_number(message: Message, state: FSMContext):
-    await state.update_data(number=message.contact.phone_number)
-    data = await state.get_data()
-    await message.answer(f'Ваше имя: {data["name"]}\nВаш возраст: {data["age"]}\nНомер: {data["number"]}')
-    await state.clear()
+@router.callback_query(F.data.startswith('item_'))
+async def category(callback: CallbackQuery):
+    try:
+        logging.debug("Received callback query with item data")
+        item_data = await rq.get_item(callback.data.split('_')[1])
+        await callback.answer('Вы выбрали товар')
+        await callback.message.answer(
+            f'Название: {item_data.name}\n'
+            f'Описание: {item_data.description}\n'
+            f'Цена: {item_data.price}$'
+        )
+    except Exception as e:
+        logging.error(f"Error handling callback query with item data: {e}")

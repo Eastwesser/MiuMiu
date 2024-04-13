@@ -6,9 +6,10 @@ from aiogram.enums import ParseMode
 
 from config import settings
 from routers import router as main_router
-
+from routers.custom.business.database.models import async_main
 
 async def main():
+    await async_main()
     dp = Dispatcher()
     dp.include_router(main_router)
 
@@ -20,5 +21,8 @@ async def main():
     await dp.start_polling(bot)
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print('Бот выключен')

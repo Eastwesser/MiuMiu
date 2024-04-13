@@ -316,7 +316,7 @@ async def ask_miumiu_gpt(message: Message, state: FSMContext):
     await state.set_state(Danila.Yandex_GPT)
 
 
-@router.message(F.text)
+@router.message(Danila.Yandex_GPT)
 async def handle_user_input(message: Message, state: FSMContext):
     await message.answer("Подождите пожалуйста, обрабатываю запрос ^w^")
 

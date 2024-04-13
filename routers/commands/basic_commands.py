@@ -1,7 +1,10 @@
+import os
+
 from aiogram import F, Router, types
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
 from aiogram.utils import markdown
+from dotenv import load_dotenv
 
 from keyboards.inline_keyboards.info_kb import build_info_kb
 from keyboards.on_start import (
@@ -11,16 +14,22 @@ from keyboards.on_start import (
     get_actions_kb,
 )
 
+bot_token = os.getenv('BOT_TOKEN')
+
+load_dotenv()
+
 router = Router(name=__name__)  # экземпляр класса Router, главное подключить router к dispatcher внутри скобок
 
 
 @router.message(CommandStart())  # added in m1, renamed in m5
 async def handle_start(message: types.Message):
     # url = "https://w7.pngwing.com/pngs/332/245/png-transparent-robot-waving-hand-bot-robot.png"
-    url = "https://64.media.tumblr.com/e04c17953a3bf8678feb7bcb5b7fbcfe/813055467fd14c85-9c/s1280x1920/8b0d5f82035c6e26ce66f29d50415a7d8897d55e.gifv"
+    # url = "https://64.media.tumblr.com/e04c17953a3bf8678feb7bcb5b7fbcfe/813055467fd14c85-9c/s1280x1920/8b0d5f82035c6e26ce66f29d50415a7d8897d55e.gifv"
+    welcome_sticker_id = "CAACAgIAAxkBAU0juGYWfesC5Y_5wM1gxbKqoEcp0LgbAAIzNgACYrv5SpdmcVJVwH4zNAQ"
+    await message.answer_sticker(sticker=welcome_sticker_id)
 
     await message.answer(
-        text=f"{markdown.hide_link(url)}Hello, {markdown.hbold(message.from_user.full_name)}!",
+        text=f"{markdown.hide_link(welcome_sticker_id)}Hello, {markdown.hbold(message.from_user.full_name)}!",
         parse_mode=ParseMode.HTML,
         reply_markup=get_on_start_kb(),
         # Handle_start вызовет при обработке команду get_on_start_kb, будет сгенерирована новая клавиатура

@@ -1,9 +1,12 @@
 import os
 import random
+import aiogram
 
+import aiofiles
 import aiohttp
 import requests
-from aiogram import Bot, types, Dispatcher
+from aiogram import exceptions as aiogram_exceptions
+from aiogram import Bot, types, Dispatcher, F
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -18,6 +21,7 @@ from keyboards.inline_keyboards.actions_kb import build_actions_kb
 bot_token = os.getenv('BOT_TOKEN')
 deep_ai_key = os.getenv('DEEP_AI_TOKEN')
 
+
 load_dotenv()
 
 bot = Bot(token=bot_token)
@@ -29,8 +33,11 @@ router = Router(name=__name__)
 MEME_COUNT = 24
 
 
-class Questioning(StatesGroup):
-    Asking = State()
+class AIfilters(StatesGroup):
+    Maskings = State()
+    Filterings = State()
+    Framings = State()
+    Rembg = State()
 
 
 @router.message(Command("memes", prefix="!/"))
@@ -287,13 +294,181 @@ async def send_presentation(message: types.Message):
     await message.answer_document(types.FSInputFile(presentation_path, presentations[0]))
 
 
-# Text to Image ========================================================================================================
-# CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
-# FILE_NAME = 'deep_ai_txt.txt'
-# FILE_PATH = os.path.join(CURRENT_DIRECTORY, FILE_NAME)
+# DEEP AI ==============================================================================================================
+CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+FILE_NAME = 'deep_ai_txt.txt'
+FILE_PATH = os.path.join(CURRENT_DIRECTORY, FILE_NAME)
+
+
+# Function to generate an image from text using DeepAI API
+async def generate_image_from_text(text: str, deep_ai_key: str) -> str:
+    try:
+        response = requests.post(
+            "https://api.deepai.org/api/text2img",
+            data={'text': text},
+            headers={'api-key': deep_ai_key}
+        )
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        response_json = response.json()
+        output_url = response_json.get("output_url")
+        if output_url:
+            return output_url
+        else:
+            return "Sorry, I couldn't generate an image at the moment."
+    except requests.exceptions.RequestException as e:
+        return f"Error: {e}"
+
+
+# Handler for the /photo_deep_ai command
+@router.message(Command("photo_deep_ai", prefix="!/"))
+async def ask_photo_gpt_deep_ai(message: Message):
+    deep_ai_key = os.getenv('DEEP_AI_KEY')
+    if not deep_ai_key:
+        await message.answer("DeepAI API key is not configured properly.")
+        return
+
+    print("File path:", FILE_PATH)  # Debug statement
+
+    # Read text from the file
+    try:
+        with open(FILE_PATH, 'r', encoding='utf-8') as file:
+            text = file.read()
+            print("Text from file:", text)  # Debug statement
+    except FileNotFoundError:
+        await message.answer("Sorry, the text file is not found.")
+        return
+    except Exception as e:
+        await message.answer(f"An error occurred while reading the file: {str(e)}")
+        return
+
+    # Generate image from text
+    output_url = await generate_image_from_text(text, deep_ai_key)
+    await message.answer_photo(output_url)
+
+
+# Handler for the /ask_deep_ai command
+@router.message(Command("ask_deep_ai", prefix="!/"))
+async def start_photo_deep_ai(message: Message):
+    await message.answer("Привет! Задайте ваш вопрос.")
+    # Set the state if needed
+
+
+# Handler for all other messages
+# @router.message(AIfilters.Rembg)
+# async def answer_photo_deep_ai(message: Message, state: FSMContext):
+#     # Get the current state directly
+#     current_state = await state.get_state()
 #
+#     if current_state == AIfilters.Filterings:
+#         question = message.text
+#         deep_ai_key = os.getenv('DEEP_AI_KEY')
 #
-# # Function to generate an image from text using DeepAI API
+#         if not deep_ai_key:
+#             await message.answer("DeepAI API key is not configured properly.")
+#             return
+#
+#         # Generate image from text
+#         output_url = await generate_image_from_text(question, deep_ai_key)
+#         await message.answer_photo(output_url)
+#
+#         # Clear the state if using FSM
+#         await state.clear()
+
+# REMOVE BACKGROUND ====================================================================================================
+# Function to remove background from an image using DeepAI API
+async def remove_background(image_url: str, deep_ai_key: str) -> str:
+    try:
+        response = requests.post(
+            "https://api.deepai.org/api/background-remover",
+            data={'image': image_url},
+            headers={'api-key': deep_ai_key}
+        )
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        response_json = response.json()
+        output_url = response_json.get("output_url")
+        if output_url:
+            return output_url
+        else:
+            return "Sorry, I couldn't remove the background at the moment."
+    except requests.exceptions.RequestException as e:
+        return f"Error: {e}"
+
+# Handler for the /remove_bg_deep_ai command
+@router.message(Command("remove_bg_deep_ai", prefix="!/"))
+async def remove_background_deep_ai(message: types.Message):
+    if not deep_ai_key:
+        await message.answer("DeepAI API key is not configured properly.")
+        return
+
+    # Extract the image URL from the message
+    command_args = message.text.split(' ', 1)[1].strip()
+    if not command_args:
+        await message.answer("Please provide an image URL.")
+        return
+
+    # Remove background from the image
+    output_url = await remove_background(command_args, deep_ai_key)
+    await message.answer_photo(output_url)
+
+@router.message(F.ContentType.PHOTO)
+async def handle_photo(message: types.Message):
+    if not deep_ai_key:
+        await message.answer("DeepAI API key is not configured properly.")
+        return
+
+    # Download the photo
+    photo = await message.photo[-1].download()
+
+    # Remove background from the image
+    output_url = await remove_background(photo, deep_ai_key)
+
+    # Send the resulting image back to the user
+    await message.reply_photo(output_url)
+
+    # Clean up
+    os.remove(photo)
+
+
+
+# COLORIZER ============================================================================================================
+# Function to colorize black and white images using DeepAI API
+# async def colorize_image(image_url: str, deep_ai_key: str) -> str:
+#     try:
+#         response = requests.post(
+#             "https://api.deepai.org/api/colorizer",
+#             data={'image': image_url},
+#             headers={'api-key': deep_ai_key}
+#         )
+#         response.raise_for_status()  # Raise an exception for HTTP errors
+#         response_json = response.json()
+#         output_url = response_json.get("output_url")
+#         if output_url:
+#             return output_url
+#         else:
+#             return "Sorry, I couldn't colorize the image at the moment."
+#     except requests.exceptions.RequestException as e:
+#         return f"Error: {e}"
+#
+# # Handler for the /colorize_image_deep_ai command
+# @router.message(Command("colorize_image_deep_ai", prefix="!/"))
+# async def colorize_image_deep_ai(message: Message):
+#     deep_ai_key = os.getenv('DEEP_AI_KEY')
+#     if not deep_ai_key:
+#         await message.answer("DeepAI API key is not configured properly.")
+#         return
+#
+#     # Extract the image URL from the message
+#     image_url = message.get_args()
+#     if not image_url:
+#         await message.answer("Please provide an image URL.")
+#         return
+#
+#     # Colorize the image
+#     output_url = await colorize_image(image_url, deep_ai_key)
+#     await message.answer_photo(output_url)
+
+# IMAGE FROM TEXT ======================================================================================================
+# Function to generate an image from text using DeepAI API
 # async def generate_image_from_text(text: str, deep_ai_key: str) -> str:
 #     try:
 #         response = requests.post(
@@ -311,58 +486,165 @@ async def send_presentation(message: types.Message):
 #     except requests.exceptions.RequestException as e:
 #         return f"Error: {e}"
 #
-#
-# # Handler for the /photo_deep_ai command
-# @router.message(Command("photo_deep_ai", prefix="!/"))
-# async def ask_photo_gpt_deep_ai(message: Message):
+# # Handler for the /generate_image_deep_ai command
+# @router.message(Command("generate_image_deep_ai", prefix="!/"))
+# async def generate_image_deep_ai(message: Message):
 #     deep_ai_key = os.getenv('DEEP_AI_KEY')
 #     if not deep_ai_key:
 #         await message.answer("DeepAI API key is not configured properly.")
 #         return
 #
-#     print("File path:", FILE_PATH)  # Debug statement
-#
-#     # Read text from the file
-#     try:
-#         with open(FILE_PATH, 'r', encoding='utf-8') as file:
-#             text = file.read()
-#             print("Text from file:", text)  # Debug statement
-#     except FileNotFoundError:
-#         await message.answer("Sorry, the text file is not found.")
-#         return
-#     except Exception as e:
-#         await message.answer(f"An error occurred while reading the file: {str(e)}")
+#     # Extract the text description from the message
+#     text = message.get_args()
+#     if not text:
+#         await message.answer("Please provide a text description.")
 #         return
 #
 #     # Generate image from text
 #     output_url = await generate_image_from_text(text, deep_ai_key)
 #     await message.answer_photo(output_url)
+
+# AI Image Editor ======================================================================================================
+# Function to edit an image using AI Image Editor from DeepAI API
+# async def edit_image_with_ai(image_url: str, text: str, deep_ai_key: str) -> str:
+#     try:
+#         response = requests.post(
+#             "https://api.deepai.org/api/image-editor",
+#             data={'image': image_url, 'text': text},
+#             headers={'api-key': deep_ai_key}
+#         )
+#         response.raise_for_status()  # Raise an exception for HTTP errors
+#         response_json = response.json()
+#         output_url = response_json.get("output_url")
+#         if output_url:
+#             return output_url
+#         else:
+#             return "Sorry, I couldn't edit the image at the moment."
+#     except requests.exceptions.RequestException as e:
+#         return f"Error: {e}"
 #
+# # Handler for the /edit_image_deep_ai command
+# @router.message(Command("edit_image_deep_ai", prefix="!/"))
+# async def edit_image_deep_ai(message: Message):
+#     deep_ai_key = os.getenv('DEEP_AI_KEY')
+#     if not deep_ai_key:
+#         await message.answer("DeepAI API key is not configured properly.")
+#         return
 #
-# # Handler for the /ask_deep_ai command
-# @router.message(Command("ask_deep_ai", prefix="!/"))
-# async def start_photo_deep_ai(message: Message):
-#     await message.answer("Привет! Задайте ваш вопрос.")
-#     # Set the state if needed
+#     # Extract the image URL and text from the message
+#     args = message.get_args().split()
+#     if len(args) != 2:
+#         await message.answer("Please provide an image URL and text.")
+#         return
+#     image_url, text = args
 #
+#     # Edit the image using AI Image Editor
+#     output_url = await edit_image_with_ai(image_url, text, deep_ai_key)
+#     await message.answer_photo(output_url)
+
+# Super Resolution =====================================================================================================
+# Function to apply Super Resolution to an image using DeepAI API
+# async def apply_super_resolution(image_url: str, deep_ai_key: str) -> str:
+#     try:
+#         response = requests.post(
+#             "https://api.deepai.org/api/torch-srgan",
+#             data={'image': image_url},
+#             headers={'api-key': deep_ai_key}
+#         )
+#         response.raise_for_status()  # Raise an exception for HTTP errors
+#         response_json = response.json()
+#         output_url = response_json.get("output_url")
+#         if output_url:
+#             return output_url
+#         else:
+#             return "Sorry, I couldn't apply Super Resolution to the image at the moment."
+#     except requests.exceptions.RequestException as e:
+#         return f"Error: {e}"
 #
-# # Handler for all other messages
-# @router.message()
-# async def answer_photo_deep_ai(message: Message, state: FSMContext):
-#     # Get the current state directly
-#     current_state = await state.get_state()
+# # Handler for the /super_resolution command
+# @router.message(Command("super_resolution", prefix="!/"))
+# async def super_resolution(message: Message):
+#     deep_ai_key = os.getenv('DEEP_AI_KEY')
+#     if not deep_ai_key:
+#         await message.answer("DeepAI API key is not configured properly.")
+#         return
 #
-#     if current_state == Questioning.Asking:
-#         question = message.text
-#         deep_ai_key = os.getenv('DEEP_AI_KEY')
+#     # Extract the image URL from the message
+#     image_url = message.get_args()
 #
-#         if not deep_ai_key:
-#             await message.answer("DeepAI API key is not configured properly.")
-#             return
-#
-#         # Generate image from text
-#         output_url = await generate_image_from_text(question, deep_ai_key)
-#         await message.answer_photo(output_url)
-#
-#         # Clear the state if using FSM
-#         await state.clear()
+#     # Apply Super Resolution to the image
+#     output_url = await apply_super_resolution(image_url, deep_ai_key)
+#     await message.answer_photo(output_url)
+
+# Waifu2x ==============================================================================================================
+'''
+Extract the photo URL or file ID from the message.
+Pass the URL or file ID to the appropriate function for processing.
+Process the photo using the DeepAI API or any other image processing API.
+Send the processed result back to the user.
+'''
+# Function to apply Waifu2x to an image using DeepAI API
+# Define states for handling the photo upload process
+UPLOADS_DIR = 'photos'
+class Waifu2xState(StatesGroup):
+    uploading_photo = State()
+
+# Function to apply Waifu2x to an image using DeepAI API
+async def apply_waifu2x(image_data: bytes, deep_ai_key: str) -> str:
+    try:
+        response = requests.post(
+            "https://api.deepai.org/api/waifu2x",
+            files={'image': image_data},
+            headers={'api-key': deep_ai_key}
+        )
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        response_json = response.json()
+        output_url = response_json.get("output_url")
+        if output_url:
+            return output_url
+        else:
+            return "Sorry, I couldn't apply Waifu2x to the image at the moment."
+    except requests.exceptions.RequestException as e:
+        return f"Error: {e}"
+
+# Handler for the /waifu2x command
+@router.message(Command("waifu2x", prefix="!/"))
+async def waifu2x_command(message: Message, state: FSMContext):
+    # Ask the user to upload a photo
+    await message.answer("Please upload a photo >w^")
+
+    # Set the state to indicate that we are expecting a photo upload
+    await state.set_state(Waifu2xState.uploading_photo)
+
+# Handler for handling the uploaded photo
+@router.message(F.photo, Waifu2xState.uploading_photo) # HOW TO HANDLE PHOTOS?
+async def handle_uploaded_photo(message: types.Message, state: FSMContext):
+    deep_ai_key = os.getenv('DEEP_AI_TOKEN')
+    if not deep_ai_key:
+        await message.answer("DeepAI API key is not configured properly.")
+        return
+
+    # Get the file ID of the uploaded photo
+    file_id = message.photo[-1].file_id
+
+    try:
+        # Download the file to the uploads directory
+        downloaded_file_path = await message.bot.download(file_id, destination=UPLOADS_DIR)
+
+        # Read the file content
+        async with aiofiles.open(downloaded_file_path, 'rb') as file:
+            photo_data = await file.read()
+
+        # Apply Waifu2x to the photo
+        output_url = await apply_waifu2x(photo_data, deep_ai_key)
+
+        # Send the processed photo back to the user
+        await message.answer_photo(output_url)
+
+    except (aiogram.exceptions.TelegramAPIError, PermissionError):
+        await message.answer("Failed to download or process the photo.")
+
+    # Reset the state
+    await state.clear()
+
+# CHECK THE EXCEPTIONS - Failed to download or process the photo.

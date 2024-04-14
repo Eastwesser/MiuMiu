@@ -436,21 +436,37 @@ async def play_five_cats(message: types.Message):
     await message.answer("Now choose the correct order!", reply_markup=inline_kb)
 
 
-@router.callback_query(lambda c: c.data.isdigit() and int(c.data) in range(1, 6))
-async def process_callback(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    choice_number = int(callback_query.data)
-    user_choices[user_id].append(choice_number)
-    if len(user_choices[user_id]) == 5:
-        await compare_choices(callback_query)
-
-
 async def compare_choices(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     user_choices_list = user_choices[user_id]
+
+    # Check if user_choices_list matches the correct_sequence
     if user_choices_list == correct_sequence:
         await callback_query.message.answer("Good job, your memory is fine :3 Play again? /play_five_cats")
     else:
         # Find the index of the first mismatch
         index = next((i for i, (x, y) in enumerate(zip(user_choices_list, correct_sequence)) if x != y), None)
-        await callback_query.message.answer(f"You have mistakes! True number is: {index + 1}")
+        await callback_query.message.answer(f"You have mistakes! The correct sequence is: {correct_sequence}")
+
+
+@router.callback_query(lambda c: c.data.isdigit() and int(c.data) in range(1, 6))
+async def process_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    choice_number = int(callback_query.data)
+    user_choices[user_id].append(choice_number)
+
+    # Get the index of the current cat
+    current_cat_index = len(user_choices[user_id])
+
+    # Check if the current cat chosen by the user matches the correct sequence
+    if choice_number == correct_sequence[current_cat_index - 1]:
+        await callback_query.message.answer("Угадали!")
+    else:
+        await callback_query.message.answer("Wrong choice! Try again.")
+
+    # If the user has made all 5 choices, provide the correct sequence
+    if current_cat_index == 5:
+        await compare_choices(callback_query)
+    else:
+        # Prompt the user to select the next cat
+        await callback_query.message.answer(f"Now choose Cat {current_cat_index + 1}")

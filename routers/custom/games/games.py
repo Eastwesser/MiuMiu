@@ -1,15 +1,14 @@
 import asyncio
+import copy
 import logging
 import random
-import copy
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
 from aiogram import Router, types
 from aiogram.enums.dice_emoji import DiceEmoji
-from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import CommandStart
+from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message)
@@ -260,8 +259,8 @@ async def process_blockme_attack(callback_query: types.CallbackQuery):
         health_p1 -= 1
 
     await callback_query.answer(f"{round_result}\n"
-                                 f"Player 1 health: {health_p1}\n"
-                                 f"Player 2 health: {health_p2}")
+                                f"Player 1 health: {health_p1}\n"
+                                f"Player 2 health: {health_p2}")
 
     # Check if any player's health is 0 or below
     if health_p1 <= 0:
@@ -271,6 +270,7 @@ async def process_blockme_attack(callback_query: types.CallbackQuery):
     else:
         # Build the keyboard and send the message for the next round
         await asyncio.sleep(5)
+
 
 # SEA BATTLE ===========================================================================================================
 # Инициализируем константу размера игрового поля
@@ -378,3 +378,79 @@ async def process_category_press(callback: CallbackQuery,
         pass
 
     await callback.answer(answer)
+
+
+# Five cats memory game ================================================================================================
+sticker_ids = [
+    "CAACAgIAAxkBAU4nKGYa5ZK0jTMFY5e2XYYrkGZDqCS1AAJVPQACxW34SnUXpLRodIq0NAQ",  # first_cat_sticker_id
+    "CAACAgIAAxkBAU4nRmYa5lH4SBbRLWwBjKwR_84afmr-AAIsNgACNZvxSvKNYjzvkYigNAQ",  # second_cat_sticker_id
+    "CAACAgIAAxkBAU4nQ2Ya5kI8KwXCzSAce4WvCnhOzi_8AAJUPAACRboJS3juH0a3Q8ocNAQ",  # third_cat_sticker_id
+    "CAACAgIAAxkBAU4nPmYa5ey_nB6hS9dX71eZL7WmJ63iAAKXPQACuSLwSqDsP1hlPM6sNAQ",  # fourth_cat_sticker_id
+    "CAACAgIAAxkBAU4nSmYa5mRSn-CFZFkO_hyI_gdKqiN-AALjOAACwVwIS78AAfOpYkBUmjQE"  # fifth_cat_sticker_id
+]
+
+correct_sequence = list(range(1, 6))
+
+# Dictionary to store user's choices
+user_choices = {}
+
+
+@router.message(Command("start_five_cats", prefix="!/"))
+async def start_five_cats(message: types.Message):
+    await message.answer("Hi! Welcome to Five Cats. Send /play_five_cats to start playing.")
+
+
+async def show_random_cats(chat_id, bot):
+    # Shuffle the order of cat sticker IDs
+    random.shuffle(sticker_ids)
+
+    # Display the shuffled cats
+    for i, cat_id in enumerate(sticker_ids, start=1):
+        await asyncio.sleep(2)  # Wait for 2 seconds
+        await bot.send_sticker(chat_id, cat_id)
+        await bot.send_message(chat_id, f"Cat {i}")
+
+
+@router.message(Command("play_five_cats", prefix="!/"))
+async def play_five_cats(message: types.Message):
+    await message.answer("Get ready! The cats will appear shortly...")
+    await asyncio.sleep(2)  # Wait for 2 seconds
+
+    # Pass the bot object to the show_random_cats function
+    await show_random_cats(message.chat.id, message.bot)
+
+    # Clear user choices
+    user_id = message.from_user.id
+    user_choices[user_id] = []
+
+    # Show the keyboard for user selection
+    five_cats_buttons = [
+        [InlineKeyboardButton(text='Рыжик', callback_data='1')],
+        [InlineKeyboardButton(text='Сиамочка', callback_data='2')],
+        [InlineKeyboardButton(text='Снежок', callback_data='3')],
+        [InlineKeyboardButton(text='Тортик', callback_data='4')],
+        [InlineKeyboardButton(text='Фиалка', callback_data='5')],
+    ]
+    inline_kb = InlineKeyboardMarkup(inline_keyboard=five_cats_buttons)
+
+    await message.answer("Now choose the correct order!", reply_markup=inline_kb)
+
+
+@router.callback_query(lambda c: c.data.isdigit() and int(c.data) in range(1, 6))
+async def process_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    choice_number = int(callback_query.data)
+    user_choices[user_id].append(choice_number)
+    if len(user_choices[user_id]) == 5:
+        await compare_choices(callback_query)
+
+
+async def compare_choices(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    user_choices_list = user_choices[user_id]
+    if user_choices_list == correct_sequence:
+        await callback_query.message.answer("Good job, your memory is fine :3 Play again? /play_five_cats")
+    else:
+        # Find the index of the first mismatch
+        index = next((i for i, (x, y) in enumerate(zip(user_choices_list, correct_sequence)) if x != y), None)
+        await callback_query.message.answer(f"You have mistakes! True number is: {index + 1}")

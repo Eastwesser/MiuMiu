@@ -381,15 +381,17 @@ async def process_category_press(callback: CallbackQuery,
 
 
 # Five cats memory game ================================================================================================
-sticker_ids = [
-    "CAACAgIAAxkBAU4nKGYa5ZK0jTMFY5e2XYYrkGZDqCS1AAJVPQACxW34SnUXpLRodIq0NAQ",  # first_cat_sticker_id
-    "CAACAgIAAxkBAU4nRmYa5lH4SBbRLWwBjKwR_84afmr-AAIsNgACNZvxSvKNYjzvkYigNAQ",  # second_cat_sticker_id
-    "CAACAgIAAxkBAU4nQ2Ya5kI8KwXCzSAce4WvCnhOzi_8AAJUPAACRboJS3juH0a3Q8ocNAQ",  # third_cat_sticker_id
-    "CAACAgIAAxkBAU4nPmYa5ey_nB6hS9dX71eZL7WmJ63iAAKXPQACuSLwSqDsP1hlPM6sNAQ",  # fourth_cat_sticker_id
-    "CAACAgIAAxkBAU4nSmYa5mRSn-CFZFkO_hyI_gdKqiN-AALjOAACwVwIS78AAfOpYkBUmjQE"  # fifth_cat_sticker_id
+cat_data = [
+    {"name": "Рыжик", "sticker_id": "CAACAgIAAxkBAU4nKGYa5ZK0jTMFY5e2XYYrkGZDqCS1AAJVPQACxW34SnUXpLRodIq0NAQ"},
+    {"name": "Сиамочка", "sticker_id": "CAACAgIAAxkBAU4nRmYa5lH4SBbRLWwBjKwR_84afmr-AAIsNgACNZvxSvKNYjzvkYigNAQ"},
+    {"name": "Снежок", "sticker_id": "CAACAgIAAxkBAU4nQ2Ya5kI8KwXCzSAce4WvCnhOzi_8AAJUPAACRboJS3juH0a3Q8ocNAQ"},
+    {"name": "Тортик", "sticker_id": "CAACAgIAAxkBAU4nPmYa5ey_nB6hS9dX71eZL7WmJ63iAAKXPQACuSLwSqDsP1hlPM6sNAQ"},
+    {"name": "Фиалка", "sticker_id": "CAACAgIAAxkBAU4nSmYa5mRSn-CFZFkO_hyI_gdKqiN-AALjOAACwVwIS78AAfOpYkBUmjQE"}
 ]
 
-correct_sequence = list(range(1, 6))
+bot_sequence = []
+
+correct_sequence = [cat["name"] for cat in cat_data]
 
 # Dictionary to store user's choices
 user_choices = {}
@@ -401,14 +403,19 @@ async def start_five_cats(message: types.Message):
 
 
 async def show_random_cats(chat_id, bot):
-    # Shuffle the order of cat sticker IDs
-    random.shuffle(sticker_ids)
+    global bot_sequence  # Declare the global variable
+
+    # Shuffle the order of cat data
+    random.shuffle(cat_data)
 
     # Display the shuffled cats
-    for i, cat_id in enumerate(sticker_ids, start=1):
+    for cat in cat_data:
         await asyncio.sleep(2)  # Wait for 2 seconds
-        await bot.send_sticker(chat_id, cat_id)
-        await bot.send_message(chat_id, f"Cat {i}")
+        await bot.send_sticker(chat_id, cat["sticker_id"])
+        await bot.send_message(chat_id, cat["name"])  # Send the name of the cat as text
+
+        # Store the sequence of cats shown by the bot
+        bot_sequence.append(cat["name"])
 
 
 @router.message(Command("play_five_cats", prefix="!/"))
@@ -437,29 +444,29 @@ async def play_five_cats(message: types.Message):
 
 
 async def compare_choices(callback_query: types.CallbackQuery):
+    global bot_sequence  # Declare the global variable
+
     user_id = callback_query.from_user.id
     user_choices_list = user_choices[user_id]
 
-    # Check if user_choices_list matches the correct_sequence
-    if user_choices_list == correct_sequence:
+    # Check if user_choices_list matches the bot_sequence
+    if user_choices_list == bot_sequence:
         await callback_query.message.answer("Good job, your memory is fine :3 Play again? /play_five_cats")
     else:
-        # Find the index of the first mismatch
-        index = next((i for i, (x, y) in enumerate(zip(user_choices_list, correct_sequence)) if x != y), None)
-        await callback_query.message.answer(f"You have mistakes! The correct sequence is: {correct_sequence}")
+        await callback_query.message.answer(f"You have mistakes! The correct sequence is: {', '.join(bot_sequence)}")
 
 
 @router.callback_query(lambda c: c.data.isdigit() and int(c.data) in range(1, 6))
 async def process_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     choice_number = int(callback_query.data)
-    user_choices[user_id].append(choice_number)
+    user_choices[user_id].append(correct_sequence[choice_number - 1])  # Adjust index to match the correct sequence
 
     # Get the index of the current cat
     current_cat_index = len(user_choices[user_id])
 
     # Check if the current cat chosen by the user matches the correct sequence
-    if choice_number == correct_sequence[current_cat_index - 1]:
+    if correct_sequence[choice_number - 1] == bot_sequence[current_cat_index - 1]:  # Adjust index for correct_sequence
         await callback_query.message.answer("Угадали!")
     else:
         await callback_query.message.answer("Wrong choice! Try again.")

@@ -420,6 +420,10 @@ async def show_random_cats(chat_id, bot):
 
 @router.message(Command("play_five_cats", prefix="!/"))
 async def play_five_cats(message: types.Message):
+    # Clear the bot_sequence list before starting a new game
+    global bot_sequence
+    bot_sequence = []
+
     await message.answer("Get ready! The cats will appear shortly...")
     await asyncio.sleep(2)  # Wait for 2 seconds
 

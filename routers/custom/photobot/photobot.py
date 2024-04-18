@@ -410,7 +410,7 @@ async def remove_background_deep_ai(message: types.Message):
     output_url = await remove_background(command_args, deep_ai_key)
     await message.answer_photo(output_url)
 
-@router.message(F.ContentType.PHOTO)
+@router.message(F.photo)
 async def handle_photo(message: types.Message):
     if not deep_ai_key:
         await message.answer("DeepAI API key is not configured properly.")

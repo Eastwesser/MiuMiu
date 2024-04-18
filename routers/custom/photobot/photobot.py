@@ -1,9 +1,13 @@
+import io
 import os
 import random
 import aiogram
+import logging
 
 import aiofiles
 import aiohttp
+import cv2
+import numpy as np
 import requests
 from aiogram import exceptions as aiogram_exceptions
 from aiogram import Bot, types, Dispatcher, F
@@ -15,6 +19,9 @@ from aiogram.types import FSInputFile
 from aiogram.types import Message
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from dotenv import load_dotenv
+from PIL import Image
+from aiogram.types import InputFile
+from aiogram.types import BufferedInputFile
 
 from keyboards.inline_keyboards.actions_kb import build_actions_kb
 
@@ -375,60 +382,77 @@ async def start_photo_deep_ai(message: Message):
 #         await state.clear()
 
 # REMOVE BACKGROUND ====================================================================================================
-# Function to remove background from an image using DeepAI API
-async def remove_background(image_url: str, deep_ai_key: str) -> str:
-    try:
-        response = requests.post(
-            "https://api.deepai.org/api/background-remover",
-            data={'image': image_url},
-            headers={'api-key': deep_ai_key}
-        )
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        response_json = response.json()
-        output_url = response_json.get("output_url")
-        if output_url:
-            return output_url
-        else:
-            return "Sorry, I couldn't remove the background at the moment."
-    except requests.exceptions.RequestException as e:
-        return f"Error: {e}"
-
-# Handler for the /remove_bg_deep_ai command
-@router.message(Command("remove_bg_deep_ai", prefix="!/"))
-async def remove_background_deep_ai(message: types.Message):
-    if not deep_ai_key:
-        await message.answer("DeepAI API key is not configured properly.")
-        return
-
-    # Extract the image URL from the message
-    command_args = message.text.split(' ', 1)[1].strip()
-    if not command_args:
-        await message.answer("Please provide an image URL.")
-        return
-
-    # Remove background from the image
-    output_url = await remove_background(command_args, deep_ai_key)
-    await message.answer_photo(output_url)
-
-@router.message(F.photo)
-async def handle_photo(message: types.Message):
-    if not deep_ai_key:
-        await message.answer("DeepAI API key is not configured properly.")
-        return
-
-    # Download the photo
-    photo = await message.photo[-1].download()
-
-    # Remove background from the image
-    output_url = await remove_background(photo, deep_ai_key)
-
-    # Send the resulting image back to the user
-    await message.reply_photo(output_url)
-
-    # Clean up
-    os.remove(photo)
-
-
+# Handler for the /rembg command to enter the Rembg state
+# @router.message(Command("rembg", prefix="/"))
+# async def start_removing_background(message: Message, state: FSMContext):
+#     await message.answer("Please provide an image URL to remove the background.")
+#     await state.set_state(AIfilters.Rembg)
+#
+#
+# # Handler for processing photos
+# @router.message(F.photo)
+# async def handle_photo(message: Message, state: FSMContext):
+#     # Check if the bot is in the Rembg state
+#     if (await state.get_state()) != 'AIFilters:Rembg':
+#         await message.answer("You need to use the /rembg command first.")
+#         return
+#
+#     if not deep_ai_key:
+#         await message.answer("DeepAI API key is not configured properly.")
+#         return
+#
+#     # Extract the image URL from the message
+#     if not message.photo:
+#         await message.answer("Please provide a valid photo.")
+#         return
+#
+#     photo_file_id = message.photo[-1].file_id
+#     photo_url = f"https://api.telegram.org/file/bot{bot_token}/" \
+#                 f"{(await bot.get_file(photo_file_id)).file_path}"
+#
+#     # Remove background from the image
+#     output_url = await remove_background(photo_url, deep_ai_key)
+#     await message.answer_photo(output_url)
+#
+# # Handler for the /remove_bg_deep_ai command
+# @router.message(Command("remove_bg_deep_ai", prefix="!/"))
+# async def remove_background_deep_ai(message: Message, state: FSMContext):
+#     if not deep_ai_key:
+#         await message.answer("DeepAI API key is not configured properly.")
+#         return
+#
+#     # Check if the bot is in the Rembg state
+#     if (await state.get_state()) != AIfilters.Rembg:
+#         await message.answer("You need to use the /rembg command first.")
+#         return
+#
+#     # Extract the image URL from the message
+#     command_args = message.text.split(' ', 1)[1].strip()
+#     if not command_args:
+#         await message.answer("Please provide an image URL.")
+#         return
+#
+#     # Remove background from the image
+#     output_url = await remove_background(command_args, deep_ai_key)
+#     await message.answer_photo(output_url)
+#
+# # Function to remove background from an image using DeepAI API
+# async def remove_background(image_url: str, deep_ai_key: str) -> str:
+#     try:
+#         response = requests.post(
+#             "https://api.deepai.org/api/background-remover",
+#             data={'image': image_url},
+#             headers={'api-key': deep_ai_key}
+#         )
+#         response.raise_for_status()  # Raise an exception for HTTP errors
+#         response_json = response.json()
+#         output_url = response_json.get("output_url")
+#         if output_url:
+#             return output_url
+#         else:
+#             return "Sorry, I couldn't remove the background at the moment."
+#     except requests.exceptions.RequestException as e:
+#         return f"Error: {e}"
 
 # COLORIZER ============================================================================================================
 # Function to colorize black and white images using DeepAI API
@@ -648,3 +672,67 @@ async def handle_uploaded_photo(message: types.Message, state: FSMContext):
     await state.clear()
 
 # CHECK THE EXCEPTIONS - Failed to download or process the photo.
+# PILLOW ===============================================================================================================
+logger = logging.getLogger(__name__)
+
+class AIFiltersPIL(StatesGroup):
+    RembgPil = State()
+
+# Handler for the /rembg command to enter the Rembg state
+# Handler for the /rembg command to enter the Rembg state
+@router.message(Command("rembg_pil", prefix="/"))
+async def start_removing_background_pil(message: types.Message):
+    await message.answer("Please send the photo to remove its background.")
+
+
+# Handler for processing photos
+@router.message(F.photo)
+async def handle_photo_pil(message: types.Message):
+    try:
+        # Get the file ID of the largest available photo
+        file_id = message.photo[-1].file_id
+
+        # Download the photo file data
+        file_path = (await message.bot.get_file(file_id)).file_path
+        photo_data_stream = await message.bot.download_file(file_path)
+
+        # Read the bytes data from the stream
+        photo_data = photo_data_stream.read()
+
+        # Process the photo to remove the background
+        processed_photo_data = await process_photo(photo_data)
+
+        # Convert the processed photo data to an InputFile object
+        processed_photo_input_file = InputFile(processed_photo_data, filename="processed_photo.png")
+
+        # Send the processed photo back to the user
+        await message.answer_photo(processed_photo_input_file)
+    except Exception as e:
+        logger.exception("Failed to process photo:", exc_info=e)
+        await message.answer("Failed to process the photo. Please try again later.")
+
+
+async def process_photo(photo_data: bytes) -> bytes:
+    try:
+        # Convert the byte data into a numpy array
+        nparr = np.frombuffer(photo_data, np.uint8)
+
+        # Decode the numpy array into an OpenCV image
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        # Convert the image to grayscale
+        grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Apply thresholding to segment the foreground from the background
+        _, thresholded_img = cv2.threshold(grayscale_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Invert the thresholded image
+        inverted_img = cv2.bitwise_not(thresholded_img)
+
+        # Convert the inverted image back to bytes
+        _, processed_photo_data = cv2.imencode('.png', inverted_img)
+
+        return processed_photo_data.tobytes()
+    except Exception as e:
+        logger.exception("Failed to process photo:", exc_info=e)
+        raise

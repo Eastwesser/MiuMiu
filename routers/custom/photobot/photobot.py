@@ -678,16 +678,35 @@ logger = logging.getLogger(__name__)
 class AIFiltersPIL(StatesGroup):
     RembgPil = State()
 
+class InputFileBytes(InputFile):
+    def __init__(self, file_data: bytes, filename: str):
+        """
+        Represents the contents of a file to be uploaded from bytes data.
+
+        :param file_data: Bytes data of the file
+        :param filename: Name of the file
+        """
+        super().__init__(filename=filename)
+        self.file_data = file_data
+
+    async def read(self, bot):
+        """
+        Implementation of the read method to yield bytes data of the file.
+        """
+        yield self.file_data
+
 # Handler for the /rembg command to enter the Rembg state
 # Handler for the /rembg command to enter the Rembg state
 @router.message(Command("rembg_pil", prefix="/"))
-async def start_removing_background_pil(message: types.Message):
+async def start_removing_background_pil(message: types.Message, state: FSMContext):
     await message.answer("Please send the photo to remove its background.")
+    await state.set_state(AIFiltersPIL.RembgPil)
 
 
 # Handler for processing photos
 @router.message(F.photo)
-async def handle_photo_pil(message: types.Message):
+async def handle_photo_pil(message: types.Message, state: FSMContext):
+    await state.set_state(AIFiltersPIL.RembgPil)
     try:
         # Get the file ID of the largest available photo
         file_id = message.photo[-1].file_id
@@ -703,14 +722,16 @@ async def handle_photo_pil(message: types.Message):
         processed_photo_data = await process_photo(photo_data)
 
         # Convert the processed photo data to an InputFile object
-        processed_photo_input_file = InputFile(processed_photo_data, filename="processed_photo.png")
+        processed_photo_input_file = InputFileBytes(processed_photo_data, filename="processed_photo.png")
 
         # Send the processed photo back to the user
         await message.answer_photo(processed_photo_input_file)
+
+        # Reset state
+        await state.clear()
     except Exception as e:
         logger.exception("Failed to process photo:", exc_info=e)
         await message.answer("Failed to process the photo. Please try again later.")
-
 
 async def process_photo(photo_data: bytes) -> bytes:
     try:

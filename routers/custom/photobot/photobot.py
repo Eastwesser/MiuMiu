@@ -715,7 +715,7 @@ async def start_photo_deep_ai(message: Message):
 #     await state.clear()
 
 
-# PILLOW NEGATIVE  =====================================================================================================
+# PILLOW INVERSION =====================================================================================================
 # # Handler for the /rembg command to enter the Rembg state
 # @router.message(Command("rembg_pil", prefix="/"))
 # async def start_removing_background_pil(message: types.Message, state: FSMContext):
@@ -953,7 +953,7 @@ async def colorize_image_pil(image: Image.Image, color: Tuple[int, int, int]) ->
         raise
 
 
-# ======================================================================================================================
+# VIDEO TO MP3 CONVERTER ===============================================================================================
 class VideoMaster(StatesGroup):
     WaitingForVideo = State()
 

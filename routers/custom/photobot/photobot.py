@@ -30,6 +30,9 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 
 from keyboards.inline_keyboards.actions_kb import build_actions_kb
 
+from pydantic import BaseModel, ValidationError
+from typing import List
+
 bot_token = os.getenv('BOT_TOKEN')
 deep_ai_key = os.getenv('DEEP_AI_TOKEN')
 
@@ -70,7 +73,6 @@ class AIfilters(StatesGroup):
 
 class AIFiltersPIL(StatesGroup):
     NegPil = State()
-    Colorize = State()
 
 
 # Define predefined colors
@@ -716,130 +718,15 @@ async def start_photo_deep_ai(message: Message):
 
 
 # PILLOW INVERSION =====================================================================================================
-# # Handler for the /rembg command to enter the Rembg state
-# @router.message(Command("rembg_pil", prefix="/"))
-# async def start_removing_background_pil(message: types.Message, state: FSMContext):
-#     await message.answer("Please send the photo to remove its background.")
-#     await state.set_state(AIFiltersPIL.NegPil)
-#
-#
-# # Handler for processing photos
-# @router.message(F.photo)
-# async def handle_photo_pil(message: types.Message, state: FSMContext):
-#     await state.set_state(AIFiltersPIL.NegPil)
-#     try:
-#         # Get the file ID of the largest available photo
-#         file_id = message.photo[-1].file_id
-#
-#         # Download the photo file data
-#         file_path = (await message.bot.get_file(file_id)).file_path
-#         photo_data_stream = await message.bot.download_file(file_path)
-#
-#         # Read the bytes data from the stream
-#         photo_data = photo_data_stream.read()
-#
-#         # Process the photo to remove the background
-#         processed_photo_data = await process_photo(photo_data)
-#
-#         # Convert the processed photo data to an InputFile object
-#         processed_photo_input_file = InputFileBytes(processed_photo_data, filename="processed_photo.png")
-#
-#         # Send the processed photo back to the user
-#         await message.answer_photo(processed_photo_input_file)
-#
-#         # Reset state
-#         await state.clear()
-#     except Exception as e:
-#         logger.exception("Failed to process photo:", exc_info=e)
-#         await message.answer("Failed to process the photo. Please try again later.")
-#
-#
-# async def process_photo(photo_data: bytes) -> bytes:
-#     try:
-#         # Convert the byte data into a numpy array
-#         nparr = np.frombuffer(photo_data, np.uint8)
-#
-#         # Decode the numpy array into an OpenCV image
-#         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-#
-#         # Convert the image to grayscale
-#         grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#
-#         # Apply thresholding to segment the foreground from the background
-#         _, thresholded_img = cv2.threshold(grayscale_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-#
-#         # Invert the thresholded image
-#         inverted_img = cv2.bitwise_not(thresholded_img)
-#
-#         # Convert the inverted image back to bytes
-#         _, processed_photo_data = cv2.imencode('.png', inverted_img)
-#
-#         return processed_photo_data.tobytes()
-#     except Exception as e:
-#         logger.exception("Failed to process photo:", exc_info=e)
-#         raise
-
-# PILLOW COLORIZER  ====================================================================================================
-async def process_photo(photo_data: bytes, color_filter: Tuple[int, int, int] = None) -> bytes:
-    try:
-        # Convert the byte data into a numpy array
-        nparr = np.frombuffer(photo_data, np.uint8)
-
-        # Decode the numpy array into an OpenCV image
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        if color_filter is not None:
-            # Convert the image to float32 data type
-            image = image.astype(np.float32)
-
-            # Normalize the color filter values to the range [0, 1]
-            color_filter = np.array(color_filter, dtype=np.float32) / 255.0
-
-            # Reshape the color filter to a single-row matrix
-            color_filter = color_filter.reshape(1, 3)
-
-            # Apply a color filter to the image
-            colored_image = cv2.add(image, color_filter)
-
-            # Clip values to ensure they are within the valid range
-            colored_image = np.clip(colored_image, 0, 255)
-
-            # Convert the colored image back to bytes
-            _, processed_photo_data = cv2.imencode('.png', colored_image.astype(np.uint8))
-        else:
-            # Convert the image to grayscale
-            grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-            # Apply thresholding to segment the foreground from the background
-            _, thresholded_img = cv2.threshold(grayscale_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-            # Invert the thresholded image
-            inverted_img = cv2.bitwise_not(thresholded_img)
-
-            # Convert the inverted image back to bytes
-            _, processed_photo_data = cv2.imencode('.png', inverted_img)
-
-        return processed_photo_data.tobytes()
-    except Exception as e:
-        logger.exception("Failed to process photo:", exc_info=e)
-        raise
-
-
-@router.message(Command("negative", prefix="/"))
-async def start_negative_pil(message: types.Message, state: FSMContext):
-    await message.answer("Please send the photo to revert colors.")
+@router.message(Command("invert", prefix="/"))
+async def start_inverting_colors_pil(message: types.Message, state: FSMContext):
+    await message.answer("Please send the photo to invert the colors.")
     await state.set_state(AIFiltersPIL.NegPil)
 
 
-@router.message(Command("colorize", prefix="/"))
-async def start_colorizing_pil(message: types.Message, state: FSMContext):
-    await message.answer("Please send the photo to colorize.")
-    await state.set_state(AIFiltersPIL.Colorize)
-
-
-# Handler for processing photos during negative process
-@router.message(AIFiltersPIL.NegPil, F.photo)
-async def handle_photo_negative(message: types.Message, state: FSMContext):
+@router.message(F.photo)
+async def handle_photo_pil(message: types.Message, state: FSMContext):
+    await state.set_state(AIFiltersPIL.NegPil)
     try:
         # Get the file ID of the largest available photo
         file_id = message.photo[-1].file_id
@@ -851,7 +738,8 @@ async def handle_photo_negative(message: types.Message, state: FSMContext):
         # Read the bytes data from the stream
         photo_data = photo_data_stream.read()
 
-        processed_photo_data = await process_photo(photo_data)
+        # Process the photo to remove the background
+        processed_photo_data = await process_photo_inversion(photo_data)
 
         # Convert the processed photo data to an InputFile object
         processed_photo_input_file = InputFileBytes(processed_photo_data, filename="processed_photo.png")
@@ -861,97 +749,36 @@ async def handle_photo_negative(message: types.Message, state: FSMContext):
 
         # Reset state
         await state.clear()
+
     except Exception as e:
         logger.exception("Failed to process photo:", exc_info=e)
         await message.answer("Failed to process the photo. Please try again later.")
 
 
-# Handler for processing photos during colorizing process
-@router.message(AIFiltersPIL.Colorize, F.photo)
-async def handle_photo_colorization(message: types.Message, state: FSMContext):
+async def process_photo_inversion(photo_data: bytes) -> bytes:
     try:
-        # Get the file ID of the largest available photo
-        file_id = message.photo[-1].file_id
+        # Convert the byte data into a numpy array
+        nparr = np.frombuffer(photo_data, np.uint8)
 
-        # Download the photo file data
-        file_path = (await message.bot.get_file(file_id)).file_path
-        photo_data_stream = await message.bot.download_file(file_path)
+        # Decode the numpy array into an OpenCV image
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # Prompt the user to select a color
-        color_message = "Please select a color for colorization:\n"
+        # Convert the image to grayscale
+        grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # Create the reply keyboard markup with resize_keyboard=True
-        color_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        # Apply thresholding to segment the foreground from the background
+        _, thresholded_img = cv2.threshold(grayscale_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-        # Create a list of KeyboardButton instances for each color name
-        for color_name in COLORS:
-            button = KeyboardButton(text=color_name.capitalize())
-            color_keyboard.add(button)
+        # Invert the thresholded image
+        inverted_img = cv2.bitwise_not(thresholded_img)
 
-        # Add the keyboard field to the reply keyboard markup
-        color_keyboard_data = color_keyboard.dict()
+        # Convert the inverted image back to bytes
+        _, processed_photo_data = cv2.imencode('.png', inverted_img)
 
-        # Add the keyboard field to the reply keyboard markup
-        color_keyboard_data['keyboard'] = []
-
-        await message.answer(color_message, reply_markup=color_keyboard)
-
-        # Wait for the user's response (color name)
-        response = await message.bot.wait_for(types.ContentTypes.TEXT, state=AIFiltersPIL.Colorize)
-
-        # Parse the user's input to get the color
-        color_name = response.text.strip().lower()
-        color = COLORS.get(color_name)
-
-        if not color:
-            await message.answer("Invalid color name. Please try again.")
-            return
-
-        with Image.open(photo_data_stream) as image:
-            # Colorize the image using the specified color
-            colorized_image = colorize_image_pil(image, color)
-
-            # Convert the colorized image to bytes
-            with io.BytesIO() as buffer:
-                colorized_image.save(buffer, format="PNG")
-                colorized_image_data = buffer.getvalue()
-
-            # Send the colorized image back to the user
-            await message.answer_photo(InputFile(colorized_image_data))
-
-        # Reset state
-        await state.clear()
+        return processed_photo_data.tobytes()
     except Exception as e:
         logger.exception("Failed to process photo:", exc_info=e)
-        await message.answer("Failed to process the photo. Please try again later.")
-
-
-async def colorize_image_pil(image: Image.Image, color: Tuple[int, int, int]) -> Image.Image:
-    """
-    Colorize the input image with the specified color using PIL.
-
-    :param image: PIL Image object
-    :param color: Color to apply to the image, specified as an RGB tuple (e.g., (255, 0, 0) for red)
-    :return: Colorized image object
-    """
-    try:
-        # Convert the image to RGB mode if it's not already in that mode
-        image = image.convert("RGB")
-
-        # Create a solid color overlay image
-        overlay = Image.new("RGB", image.size, color)
-
-        # Convert the overlay to grayscale
-        overlay_gray = overlay.convert("L")
-
-        # Blend the original image with the grayscale version of the color overlay using the "multiply" blending mode
-        colorized_image = ImageChops.multiply(image, overlay_gray)
-
-        return colorized_image
-    except Exception as e:
-        logger.exception("Failed to colorize image:", exc_info=e)
         raise
-
 
 # VIDEO TO MP3 CONVERTER ===============================================================================================
 class VideoMaster(StatesGroup):

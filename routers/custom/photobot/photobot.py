@@ -1,28 +1,32 @@
+import asyncio
 import io
 import logging
 import os
+import tempfile
 import random
 from typing import Tuple
 
-import aiofiles
-import aiogram
+from io import BytesIO
 import aiohttp
 import cv2
+import moviepy.editor as mp
 import numpy as np
 import requests
+from PIL import Image
 from PIL import ImageChops
 from aiogram import Bot, types, Dispatcher, F
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import FSInputFile
+from aiogram.types import FSInputFile, BufferedInputFile
 from aiogram.types import InputFile
-from aiogram.types import Message
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from dotenv import load_dotenv
-from PIL import Image
 from aiogram.types import KeyboardButton
+from aiogram.types import Message
+from aiogram.types import ReplyKeyboardMarkup
+from dotenv import load_dotenv
+from aiogram.types import CallbackQuery
+from moviepy.video.io.VideoFileClip import VideoFileClip
 
 from keyboards.inline_keyboards.actions_kb import build_actions_kb
 
@@ -333,6 +337,7 @@ async def send_presentation(message: types.Message):
 
     # Send the presentation using types.InputFile
     await message.answer_document(types.FSInputFile(presentation_path, presentations[0]))
+
 
 # DEEP AI ==============================================================================================================
 CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -946,3 +951,48 @@ async def colorize_image_pil(image: Image.Image, color: Tuple[int, int, int]) ->
     except Exception as e:
         logger.exception("Failed to colorize image:", exc_info=e)
         raise
+
+
+# ======================================================================================================================
+class VideoMaster(StatesGroup):
+    WaitingForVideo = State()
+
+@router.message(F.video)
+async def handle_video(message: Message, state: FSMContext):
+    await state.set_state(VideoMaster.WaitingForVideo)
+    if message.video.duration <= 30:
+        video_file = await message.bot.get_file(message.video.file_id)
+
+        # Download the video file into memory
+        input_video_stream = BytesIO()
+        await message.bot.download_file(video_file.file_path, destination=input_video_stream)
+
+        # Write the video stream to a temporary file
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video_file:
+            temp_video_file.write(input_video_stream.getvalue())
+            temp_video_file_path = temp_video_file.name
+
+        # Extract audio from the video
+        video = VideoFileClip(temp_video_file_path)
+        temp_audio_file_path = temp_video_file_path.replace(".mp4", ".mp3")
+        video.audio.write_audiofile(temp_audio_file_path)
+        video.close()  # Close the VideoFileClip instance
+
+        # Open the audio file and send it as a voice message
+        with open(temp_audio_file_path, "rb") as audio_file:
+            audio_bytes = audio_file.read()
+            audio = BufferedInputFile(audio_bytes, filename="audio.mp3")
+            await message.reply_voice(audio)
+
+        # Remove the temporary files
+        os.unlink(temp_video_file_path)
+        os.unlink(temp_audio_file_path)
+
+        await state.clear()
+    else:
+        await message.answer("Sorry, the video duration exceeds the limit of 30 seconds.")
+
+@router.message(Command("start_video", prefix="!/"))
+async def start_video(message: Message, state: FSMContext):
+    await state.set_state(VideoMaster.WaitingForVideo)
+    await message.answer("Send me a video (30 seconds maximum).")

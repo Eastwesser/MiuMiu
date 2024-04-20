@@ -982,7 +982,8 @@ async def handle_video(message: Message, state: FSMContext):
         with open(temp_audio_file_path, "rb") as audio_file:
             audio_bytes = audio_file.read()
             audio = BufferedInputFile(audio_bytes, filename="audio.mp3")
-            await message.reply_voice(audio)
+            await message.reply_document(audio)
+            # await message.reply_voice(audio) for voice messages
 
         # Remove the temporary files
         os.unlink(temp_video_file_path)
@@ -992,7 +993,7 @@ async def handle_video(message: Message, state: FSMContext):
     else:
         await message.answer("Sorry, the video duration exceeds the limit of 30 seconds.")
 
-@router.message(Command("start_video", prefix="!/"))
+@router.message(Command("video_to_mp3", prefix="!/"))
 async def start_video(message: Message, state: FSMContext):
     await state.set_state(VideoMaster.WaitingForVideo)
     await message.answer("Send me a video (30 seconds maximum).")

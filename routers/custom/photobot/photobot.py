@@ -1,12 +1,16 @@
+import base64
+import json
 import logging
 import os
 import random
 import tempfile
+import time
 from io import BytesIO
 
 import aiohttp
 import cv2
 import numpy as np
+import requests
 from aiogram import Bot, types, Dispatcher, F
 from aiogram import Router
 from aiogram.filters import Command
@@ -14,16 +18,16 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import FSInputFile, BufferedInputFile
 from aiogram.types import InputFile
-from aiogram.types import KeyboardButton
 from aiogram.types import Message
-from aiogram.types import ReplyKeyboardMarkup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from dotenv import load_dotenv
 from moviepy.video.io.VideoFileClip import VideoFileClip
 
 from keyboards.inline_keyboards.actions_kb import build_actions_kb
 
 bot_token = os.getenv('BOT_TOKEN')
-deep_ai_key = os.getenv('DEEP_AI_TOKEN')
+fusion_brain_token = os.getenv('FUSION_BRAIN_TOKEN')
+fusion_brain_key = os.getenv('FB_KEY')
 
 load_dotenv()
 
@@ -431,3 +435,132 @@ async def handle_video(message: Message, state: FSMContext):
 async def start_video(message: Message, state: FSMContext):
     await state.set_state(VideoMaster.WaitingForVideo)
     await message.answer("Send me a video (30 seconds maximum).")
+
+
+# KADINSKIY ============================================================================================================
+class KadinskyStates(StatesGroup):
+    Intro = State()
+    TextToImage = State()
+
+
+class ButtonTextKadinsky:
+    TEXT_TO_IMAGE = "Text to image"
+
+
+API_URL = "https://api-key.fusionbrain.ai/"
+
+MODELS_ENDPOINT = API_URL + "key/api/v1/models"
+GENERATE_ENDPOINT = API_URL + "key/api/v1/text2image/run"
+STATUS_ENDPOINT = API_URL + "key/api/v1/text2image/status/"
+
+headers = {
+    'X-Key': f'Key {fusion_brain_token}',
+    'X-Secret': f'Secret {fusion_brain_key}',
+}
+
+
+def get_text_to_image_kb() -> ReplyKeyboardMarkup:
+    text_to_image_button = KeyboardButton(text="Text to image")
+    buttons_row_1 = [text_to_image_button]
+    markup_keyboard = ReplyKeyboardMarkup(
+        keyboard=[buttons_row_1],
+        resize_keyboard=True
+    )
+    return markup_keyboard
+
+
+# Class to interact with Text2Image API
+class Text2ImageAPI:
+    def __init__(self, url, fusion_brain_token, fusion_brain_key):
+        self.URL = url
+        self.AUTH_HEADERS = {
+            'X-Key': f'Key {fusion_brain_token}',
+            'X-Secret': f'Secret {fusion_brain_key}',
+        }
+
+    def get_model(self):
+        response = requests.get(self.URL + 'key/api/v1/models', headers=self.AUTH_HEADERS)
+        data = response.json()
+        return data[0]['id']
+
+    def generate(self, prompt, model, images=1, width=1024, height=1024):
+        params = {
+            "type": "GENERATE",
+            "numImages": images,
+            "width": width,
+            "height": height,
+            "generateParams": {
+                "query": f"{prompt}"
+            }
+        }
+
+        data = {
+            'model_id': (None, model),
+            'params': (None, json.dumps(params), 'application/json')
+        }
+        response = requests.post(self.URL + 'key/api/v1/text2image/run', headers=self.AUTH_HEADERS, files=data)
+        data = response.json()
+        return data['uuid']
+
+    def check_generation(self, request_id, attempts=10, delay=10):
+        while attempts > 0:
+            response = requests.get(self.URL + 'key/api/v1/text2image/status/' + request_id, headers=self.AUTH_HEADERS)
+            data = response.json()
+            if data['status'] == 'DONE':
+                return data['images']
+
+            attempts -= 1
+            time.sleep(delay)
+
+
+@router.message(Command("start_kadinsky", prefix="!/"))
+async def start(message: types.Message):
+    await message.answer(
+        "Welcome to the Kandinsky bot! Please choose an option:",
+        reply_markup=get_text_to_image_kb()
+    )
+
+
+@router.message(F.text == ButtonTextKadinsky.TEXT_TO_IMAGE)
+async def handle_text_to_image(message: Message, state: FSMContext):
+    await state.set_state(KadinskyStates.Intro)
+    await message.answer("Please enter the text you want to generate an image for:")
+    await state.set_state(KadinskyStates.TextToImage)
+
+
+@router.message(KadinskyStates.TextToImage)
+async def process_text_for_image(message: types.Message, state: FSMContext):
+    await state.set_state(KadinskyStates.TextToImage)
+    text = message.text
+    api = Text2ImageAPI(
+        "https://api-key.fusionbrain.ai/",
+        f"{fusion_brain_token}",
+        f"{fusion_brain_key}"
+    )
+    model_id = api.get_model()
+    if model_id:
+        print(f"Model ID: {model_id}")
+        uuid = api.generate(text, model_id)
+        print(f"Image UUID: {uuid}")
+        images = api.check_generation(uuid)
+
+        if images:
+            print(f"Images: {images}")
+
+            # Extract and decode base64 image data
+            image_base64 = images[0]
+            image_data = base64.b64decode(image_base64)
+
+            # Use BufferedInputFile or URLInputFile depending on your needs
+            # Here, I'll demonstrate using BufferedInputFile
+            buffered_input_file = types.input_file.BufferedInputFile(file=image_data, filename="image.jpg")
+
+            # Send the image data as a photo
+            await message.answer_photo(buffered_input_file)
+
+        else:
+            await message.answer("Error generating image. Please try again later.")
+    else:
+        await message.answer("Error fetching model ID. Please try again later.")
+
+    await state.clear()

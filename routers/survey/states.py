@@ -5,3 +5,5 @@ class Survey(StatesGroup):
     full_name = State()
     email = State()
     email_newsletter = State()
+    phone = State()
+    city = State()

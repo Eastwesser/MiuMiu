@@ -8,10 +8,8 @@ import time
 from io import BytesIO
 
 import aiohttp
-import cv2
-import numpy as np
 import requests
-from PIL import Image, ImageFilter
+from PIL import Image, ImageOps
 from aiogram import Bot, types, Dispatcher, F
 from aiogram import Router
 from aiogram.filters import Command
@@ -24,6 +22,7 @@ from aiogram.types import Message
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from dotenv import load_dotenv
 from moviepy.video.io.VideoFileClip import VideoFileClip
+from rembg import remove
 
 from keyboards.inline_keyboards.actions_kb import build_actions_kb
 
@@ -65,7 +64,6 @@ class AIfilters(StatesGroup):
     Filterings = State()
     Framings = State()
     Rembg = State()
-
 
 
 # MEME BOX
@@ -324,17 +322,22 @@ async def send_presentation(message: types.Message):
     # Send the presentation using types.InputFile
     await message.answer_document(types.FSInputFile(presentation_path, presentations[0]))
 
+
 # PILLOW INVERSION AND REMBG ===========================================================================================
 class AIFiltersPIL(StatesGroup):
     NegPil = State()
     RemoveBg = State()
 
+
+# Command handler for /invert
 @router.message(Command("invert", prefix="/"))
 async def start_inverting_colors_pil(message: types.Message, state: FSMContext):
     print("Received /invert command")
     await message.answer("Please send the photo to invert the colors.")
     await state.set_state(AIFiltersPIL.NegPil)
 
+
+# Command handler for /rembg
 @router.message(Command("rembg", prefix="!/"))
 async def remove_background_start(message: types.Message, state: FSMContext):
     print("Received /rembg command")
@@ -342,6 +345,8 @@ async def remove_background_start(message: types.Message, state: FSMContext):
     await state.set_state(AIFiltersPIL.RemoveBg)
     logger.info("State set to RemoveBg")
 
+
+# Message handler for photo inversion
 @router.message(F.photo, StateFilter(AIFiltersPIL.NegPil))
 async def handle_photo_inversion_pil(message: types.Message, state: FSMContext):
     print("Handling photo inversion")
@@ -354,17 +359,22 @@ async def handle_photo_inversion_pil(message: types.Message, state: FSMContext):
         logger.exception("Failed to process photo:", exc_info=e)
         await message.answer("Failed to process the photo. Please try again later.")
 
+
+# Message handler for background removal
 @router.message(F.photo, StateFilter(AIFiltersPIL.RemoveBg))
 async def handle_photo_remove_background(message: types.Message, state: FSMContext):
     print("Handling photo background removal")
     try:
         photo_data = await download_photo_data(message)
-        processed_photo_data = await remove_background_pil(photo_data)
+        processed_photo_data = await remove_background_rembg(photo_data)
         await send_processed_photo(message, processed_photo_data)
         await state.clear()
     except Exception as e:
         logger.exception("Failed to process photo:", exc_info=e)
         await message.answer("Failed to process the photo. Please try again later.")
+
+
+# Helper function to download photo data
 async def download_photo_data(message: types.Message) -> bytes:
     print("Downloading photo data")
     file_id = message.photo[-1].file_id
@@ -373,39 +383,58 @@ async def download_photo_data(message: types.Message) -> bytes:
     photo_data = photo_data_stream.read()
     return photo_data
 
+
+# Helper function to send processed photo
 async def send_processed_photo(message: types.Message, processed_photo_data: bytes):
     print("Sending processed photo")
     processed_photo_input_file = InputFileBytes(processed_photo_data, filename="processed_photo.png")
     await message.answer_photo(processed_photo_input_file)
 
+
+# Function to process photo inversion
 async def process_photo_inversion(photo_data: bytes) -> bytes:
     print("Processing photo inversion")
     try:
-        nparr = np.frombuffer(photo_data, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        _, thresholded_img = cv2.threshold(grayscale_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        inverted_img = cv2.bitwise_not(thresholded_img)
-        _, processed_photo_data = cv2.imencode('.png', inverted_img)
-        return processed_photo_data.tobytes()
+        # Convert photo data to PIL Image
+        image = Image.open(BytesIO(photo_data))
+
+        # Convert image to grayscale
+        grayscale_image = image.convert("L")
+
+        # Invert colors
+        inverted_image = ImageOps.invert(grayscale_image)
+
+        # Convert image to PNG format
+        output_buffer = BytesIO()
+        inverted_image.save(output_buffer, format="PNG")
+        inverted_image_data = output_buffer.getvalue()
+
+        return inverted_image_data
     except Exception as e:
-        logger.exception("Failed to process photo:", exc_info=e)
+        logger.exception("Failed to process photo inversion:", exc_info=e)
         raise
 
-async def remove_background_pil(photo_data: bytes) -> bytes:
-    print("Removing background using PIL")
+
+# Function to remove background using rembg
+async def remove_background_rembg(photo_data: bytes) -> bytes:
+    print("Removing background using rembg")
     try:
         image = Image.open(BytesIO(photo_data))
-        image = image.convert("RGBA")
-        new_image = Image.new("RGBA", image.size, (255, 255, 255, 0))
-        new_image.paste(image, (0, 0), image)
-        output = BytesIO()
-        new_image.save(output, format="PNG")
-        processed_photo_data = output.getvalue()
+        processed_image = remove(image)
+
+        # Save the processed image to a BytesIO buffer
+        output_buffer = BytesIO()
+        processed_image.save(output_buffer, format="PNG")
+        output_buffer.seek(0)  # Reset the buffer pointer to the beginning
+
+        # Get the processed photo data as bytes
+        processed_photo_data = output_buffer.getvalue()
+
         return processed_photo_data
     except Exception as e:
-        logger.error(f"Error removing background: {e}")
-        return None
+        logger.error(f"Error removing background using rembg: {e}")
+        raise
+
 
 # VIDEO TO MP3 CONVERTER ===============================================================================================
 class VideoMaster(StatesGroup):

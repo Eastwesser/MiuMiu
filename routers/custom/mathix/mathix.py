@@ -318,7 +318,7 @@ async def converter_menu(message: types.Message):
 last_conversion_command = None
 
 
-@router.callback_query()
+@router.callback_query(lambda c: c.data in additional_keyboards or c.data in conversion_functions)
 async def handle_conversion_query(callback_query: types.CallbackQuery):
     global last_conversion_command
     conversion_command = callback_query.data
@@ -337,7 +337,6 @@ async def handle_conversion_query(callback_query: types.CallbackQuery):
     lambda message: message.text and message.text.strip().replace('.', '', 1).isdigit()
                     and last_conversion_command is not None
 )
-
 async def handle_numbers(message: types.Message):
     if last_conversion_command in conversion_functions:
         try:

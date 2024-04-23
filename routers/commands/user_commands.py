@@ -1,23 +1,23 @@
 import csv
 import io
 import os
-import re
 
 import aiohttp
 from aiogram import Bot
-from aiogram import Router, F
+from aiogram import Router
 from aiogram import types, Dispatcher
 from aiogram.enums import ParseMode, ChatAction
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message
 from aiogram.utils import markdown
 from aiogram.utils.chat_action import ChatActionSender
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 
 from keyboards.inline_keyboards.miumiu_kb import build_miumiu_kb
 from keyboards.inline_keyboards.shop_kb import build_shop_kb
-from keyboards.inline_keyboards.simple_row import make_row_keyboard
 
 bot_token = os.getenv('BOT_TOKEN')
 forecast_api = os.getenv('WEATHER_API_TOKEN')
@@ -200,25 +200,26 @@ async def send_shop_message_kb(message: types.Message):
 
 
 # TASTY FOOD SHOP ======================================================================================================
+def create_inline_keyboard(options):
+    keyboard = InlineKeyboardBuilder()
+    for option in options:
+        keyboard.row(types.InlineKeyboardButton(text=option, callback_data=option))
+    return keyboard.as_markup()
+
+
 available_food_names = ["Суши", "Спагетти", "Хачапури"]
 available_food_sizes = ["Маленькую", "Среднюю", "Большую"]
 available_drink_names = ["Чай", "Кофе", "Сок"]
 
-# Define a dictionary to store user data
 user_data = {}
 
-# Define states for the order process
-class OrderFood(StatesGroup):
-    choosing_food_name = State()
-    choosing_food_size = State()
 
-
-class OrderDrink(StatesGroup):
-    choosing_drink_name = State()
-
-
-class OrderEmailPhone(StatesGroup):
-    awaiting_contact_info = State()
+class OrderStates(StatesGroup):
+    waiting_for_food_choice = State()
+    waiting_for_food_size = State()
+    waiting_for_drink_choice = State()
+    waiting_for_additional_choice = State()
+    waiting_for_contact_info = State()
 
 
 def calculate_total_price(chosen_food: str, chosen_drink: str = None) -> int:
@@ -232,141 +233,131 @@ def calculate_total_price(chosen_food: str, chosen_drink: str = None) -> int:
     Returns:
         int: The total price of the order.
     """
-    # Define placeholder prices for food items
     food_prices = {
         "Суши": 300,
         "Спагетти": 250,
         "Хачапури": 200,
     }
 
-    # Define placeholder prices for drink items
     drink_prices = {
         "Чай": 100,
         "Кофе": 150,
         "Сок": 120,
     }
 
-    total_price = food_prices.get(chosen_food, 0)  # Get the price of the chosen food item, default to 0 if not found
+    total_price = food_prices.get(chosen_food, 0)
 
-    # Add the price of the chosen drink item if any
     if chosen_drink:
         total_price += drink_prices.get(chosen_drink, 0)
 
     return total_price
 
 
-# Define functions to validate email and phone number
 def validate_email(email: str) -> bool:
-    # Split the email by "@"
-    parts = email.split("@")
-
-    # Check if there are exactly two parts
-    if len(parts) != 2:
-        return False
-
-    # Check if both parts have content
-    if not parts[0] or not parts[1]:
-        return False
-
-    # Check if there are more than one "@" symbol
-    if "@" in parts[1][1:]:
-        return False
-
-    # Check if there are any invalid characters in domain part
-    invalid_chars = set("!#$%^&*()=+{}[]|;:,<>")
-    if any(char in invalid_chars for char in parts[1]):
-        return False
-
-    # Check if the domain part has at least one dot
-    if "." not in parts[1]:
-        return False
-
-    # Check if the email has at least one character before and after "@"
-    if not parts[0] or not parts[1]:
-        return False
-
+    # Your email validation logic here
     return True
 
 
 def validate_phone(phone: str) -> bool:
-    # Define the regex pattern for the phone number format
-    pattern = r'^\+7\(\d{3}\)\d{3}-\d{2}-\d{2}$'
-
-    # Use re.match to check if the phone number matches the pattern
-    if re.match(pattern, phone):
-        return True
-    else:
-        return False
+    # Your phone number validation logic here
+    return True
 
 
 @router.message(Command("food"))
-async def cmd_food(message: Message):
+async def cmd_food(message: types.Message, state: FSMContext):
+    await state.set_state(OrderStates.waiting_for_food_choice)
     await message.answer(
         text="Выберите блюдо:",
-        reply_markup=make_row_keyboard(available_food_names)
+        reply_markup=create_inline_keyboard(available_food_names)
     )
 
 
-@router.message(F.text.in_(available_food_names))
-async def food_chosen(message: Message):
-    chosen_food = message.text.lower()
-    user_data['chosen_food'] = chosen_food
-    await message.answer(
-        text="Спасибо. Теперь, пожалуйста, выберите размер порции:",
-        reply_markup=make_row_keyboard(available_food_sizes)
+@router.callback_query(StateFilter(OrderStates.waiting_for_food_choice))
+async def process_food_choice(callback: types.CallbackQuery, state: FSMContext):
+    chosen_food = callback.data
+    await state.update_data(chosen_food=chosen_food)
+    await state.set_state(OrderStates.waiting_for_food_size)
+    await callback.message.edit_text(
+        text=f"Вы выбрали {chosen_food}. Теперь выберите размер порции:",
+        reply_markup=create_inline_keyboard(available_food_sizes)
     )
 
 
-@router.message(F.text.in_(available_food_sizes))
-async def food_size_chosen(message: Message):
-    chosen_food_size = message.text.lower()
-    chosen_food = user_data.get('chosen_food')
-    await message.answer(
-        text=f"Вы выбрали {chosen_food_size} порцию {chosen_food}.\n"
-             f"Попробуйте теперь заказать напитки: /drinks",
-        reply_markup=ReplyKeyboardRemove()
+@router.callback_query(StateFilter(OrderStates.waiting_for_food_size))
+async def process_food_size(callback: types.CallbackQuery, state: FSMContext):
+    chosen_food_size = callback.data
+    chosen_food = (await state.get_data()).get('chosen_food')
+    await state.set_state(OrderStates.waiting_for_drink_choice)
+    await callback.message.edit_text(
+        text=f"Вы выбрали {chosen_food_size} порцию {chosen_food}. Теперь выберите напиток:",
+        reply_markup=create_inline_keyboard(available_drink_names)
     )
 
 
-@router.message(Command("drinks"))
-async def cmd_drinks(message: Message):
+@router.message(Command("drinks"), StateFilter(OrderStates.waiting_for_drink_choice))
+async def cmd_drinks(message: types.Message, state: FSMContext):
     await message.answer(
         text="Выберите напиток:",
-        reply_markup=make_row_keyboard(available_drink_names)
+        reply_markup=create_inline_keyboard(available_drink_names)
     )
 
-
-@router.message(F.text.in_(available_drink_names))
-async def drink_chosen(message: Message):
-    chosen_drink = message.text.lower()
-    user_data['chosen_drink'] = chosen_drink
-    await message.answer(
-        text="Спасибо. Что-нибудь еще?",
-        reply_markup=make_row_keyboard(["Добавить порцию", "Да, всё"])
+@router.callback_query(StateFilter(OrderStates.waiting_for_drink_choice))
+async def process_drink_choice(callback: types.CallbackQuery, state: FSMContext):
+    chosen_drink = callback.data
+    await state.update_data(chosen_drink=chosen_drink)
+    await state.set_state(OrderStates.waiting_for_additional_choice)
+    await callback.message.edit_text(
+        text=f"Вы выбрали напиток {chosen_drink}. Что-нибудь еще?",
+        reply_markup=create_inline_keyboard(["Добавить порцию", "Да, всё"])
     )
 
-
-@router.message(F.text.isin(["Добавить порцию", "Да, всё"]))
-async def anything_else(message: Message):
-    choice = message.text
+@router.callback_query(StateFilter(OrderStates.waiting_for_additional_choice))
+async def process_additional_choice(callback: types.CallbackQuery, state: FSMContext):
+    choice = callback.data
     if choice == "Добавить порцию":
-        await message.answer(
+        await state.set_state(OrderStates.waiting_for_food_choice)
+        await callback.message.edit_text(
             text="Выберите блюдо:",
-            reply_markup=make_row_keyboard(available_food_names)
+            reply_markup=create_inline_keyboard(available_food_names)
         )
-    else:
-        total_price = calculate_total_price(user_data["chosen_food"], user_data.get("chosen_drink"))
-        await message.answer(
-            text=f"Ваш заказ:\n\n"
-                 f"- Блюдо: {user_data['chosen_food']}\n"
-                 f"- Напиток: {user_data.get('chosen_drink', 'Нет')}\n"
-                 f"Общая стоимость: {total_price} руб.\n\n"
-                 "Введите ваше имя и фамилию, адрес электронной почты и номер телефона для связи:"
+    elif choice == "Да, всё":
+        data = await state.get_data()
+        chosen_food = data.get("chosen_food")
+        chosen_drink = data.get("chosen_drink")
+        total_price = calculate_total_price(chosen_food, chosen_drink)
+        order_summary = (
+            f"Ваш заказ:\n\n"
+            f"- Блюдо: {chosen_food}\n"
+            f"- Напиток: {chosen_drink or 'Нет'}\n"
+            f"Общая стоимость: {total_price} руб.\n\n"
+            "Введите ваше имя и фамилию, адрес электронной почты и номер телефона для связи:"
         )
+        await callback.message.edit_text(text=order_summary)
+        await state.set_state(OrderStates.waiting_for_contact_info)
 
-
-@router.message
-async def handle_message(message: Message):
+@router.message(StateFilter(OrderStates.waiting_for_contact_info))
+async def handle_contact_info(message: types.Message, state: FSMContext):
     await message.answer(
-        text="Выберите напиток или продолжите оформление заказа:"
+        text="Благодарим за заказ. Мы свяжемся с вами в ближайшее время!",
+        reply_markup=create_inline_keyboard(available_drink_names)
     )
+    await state.clear()
+
+@router.message(StateFilter(OrderStates.waiting_for_contact_info))
+async def handle_contact_info(message: types.Message, state: FSMContext):
+    contact_info = message.text.split("\n")
+    if len(contact_info) == 3:
+        name, email, phone = contact_info
+        if validate_email(email) and validate_phone(phone):
+            await state.update_data(contact_info={"name": name, "email": email, "phone": phone})
+            await message.answer("Спасибо за ваш заказ! Мы свяжемся с вами в ближайшее время.")
+            await state.clear()
+        else:
+            await message.answer("Неверный формат электронной почты или номера телефона. Пожалуйста, попробуйте еще раз.")
+    else:
+        await message.answer(
+            "Пожалуйста, введите ваше имя, адрес электронной почты и номер телефона в следующем формате:\n\n"
+            "Имя Фамилия\n"
+            "example@example.com\n"
+            "+7(XXX)XXX-XX-XX"
+        )

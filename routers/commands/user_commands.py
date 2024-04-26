@@ -350,7 +350,8 @@ async def handle_contact_info(message: types.Message, state: FSMContext):
         name, email, phone = contact_info
         if validate_email(email) and validate_phone(phone):
             await state.update_data(contact_info={"name": name, "email": email, "phone": phone})
-            await message.answer("Спасибо за ваш заказ! Мы свяжемся с вами в ближайшее время.")
+            await message.answer("Спасибо за ваш заказ! Мы свяжемся с вами в ближайшее время.\n"
+                                 "Вы можете продолжить далее, выбрав напиток.")
             await state.clear()
         else:
             await message.answer("Неверный формат электронной почты или номера телефона. Пожалуйста, попробуйте еще раз.")

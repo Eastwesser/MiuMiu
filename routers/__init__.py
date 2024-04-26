@@ -25,13 +25,13 @@ router = Router(name=__name__)
 router.include_routers(callback_router,
                        commands_router,
                        survey_router,
-                       media_router,
                        business_router,
                        games_router,
                        mathix_router,
                        photobot_router,
+                       media_router,
                        # add your router here (if you want)
-                       admin_router  # this should be the last one here
+                       admin_router,  # this should be the last one here
                        )
 
 # the router below has to be the final, echo-bot command!!!

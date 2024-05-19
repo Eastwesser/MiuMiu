@@ -10,7 +10,6 @@ from aiogram.enums import ParseMode, ChatAction
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
 from aiogram.utils import markdown
 from aiogram.utils.chat_action import ChatActionSender
 from aiogram.utils.keyboard import InlineKeyboardBuilder

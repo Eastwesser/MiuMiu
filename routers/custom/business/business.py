@@ -23,7 +23,6 @@ from aiogram.types import (
     Message
 )
 from dotenv import load_dotenv
-from forex_python.converter import CurrencyRates
 
 load_dotenv()
 
@@ -38,8 +37,6 @@ yandex_api_key = os.getenv('YANDEX_API_KEY')
 
 bot = Bot(token=bot_token)
 dp = Dispatcher(bot=bot, storage=MemoryStorage())
-
-currency_converter = CurrencyRates()
 
 data_amount = 0
 

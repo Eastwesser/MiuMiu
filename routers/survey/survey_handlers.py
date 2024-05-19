@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils import markdown  # чтобы была единая разметка при поступлении текста на вход
 
 from keyboards.on_start import build_yes_or_no_keyboard
-from validators.email_validators import valid_email_filter
+
 from .states import Survey
 
 router = Router(name="__name__")
@@ -48,7 +48,7 @@ async def handle_survey_city(
     )
 
 
-@router.message(Survey.email, valid_email_filter)
+@router.message(Survey.email)
 async def handle_survey_email_message(
         message: types.Message,
         state: FSMContext,

@@ -1,4 +1,4 @@
 .env
-venv/
+.venv/
 rembg_pics/
 presentations/
